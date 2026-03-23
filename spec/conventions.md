@@ -10,6 +10,35 @@
 | Spec files | `snake_case.md` | `spec/logic/model_lens/my_module.md` |
 | Test files | `test_<module>.py` | `test/model_lens/test_my_module.py` |
 
+## File Header
+
+Every new file created under `src/` must begin with the following Apache 2.0 copyright notice,
+before any imports or code:
+
+```python
+# Copyright 2025 ModelLens Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+```
+
+**Rules:**
+- Replace the year with the current year at the time the file is created.
+- The copyright owner is always `ModelLens Contributors`.
+- The header must be the **very first content** in the file, before the module docstring and all imports.
+- This applies to every new `.py` file added under `src/model_lens/`.
+
+---
+
 ## Coding Style
 
 ### Line Length
