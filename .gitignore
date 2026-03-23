@@ -1,0 +1,35 @@
+# Editor
+.vscode
+
+# Python virtual environment
+.venv/
+uv.lock
+*.egg-info/
+*.egg
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+*.tgz
+
+# Aider
+.aider*
+!.aider.instructions.md
