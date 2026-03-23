@@ -8,33 +8,31 @@ if [[ -z $OPENROUTER_API_KEY ]]; then
 fi
 
 MODEL="openrouter/anthropic/claude-sonnet-4.6"
-ALLOW_SPEC=false
-ALLOW_TEST=false
+ADD_SPEC=false
 
 for arg in "$@"; do
     case "$arg" in
         --spec)
-            ALLOW_SPEC=true
-            ;;
-        --test)
-            ALLOW_TEST=true
+            ADD_SPEC=true
             ;;
         *)
             echo "Unknown argument: $arg" >&2
-            echo "Usage: $0 [--spec] [--test]" >&2
+            echo "Usage: $0 [--spec]" >&2
             exit 1
             ;;
     esac
 done
 
-AIDER_ARGS=(--read .aider.instructions.md --read dev)
+AIDER_ARGS=(--read .aider.instructions.md)
 
-if [[ "$ALLOW_SPEC" != true ]]; then
-    AIDER_ARGS+=(--read spec)
-fi
-
-if [[ "$ALLOW_TEST" != true ]]; then
-    AIDER_ARGS+=(--read test)
+if [[ "$ADD_SPEC" == true ]]; then
+    AIDER_ARGS+=(
+        --read spec/architecture.md
+        --read spec/configuration.md
+        --read spec/conventions.md
+        --read spec/errors.md
+        --read spec/glossary.md
+    )
 fi
 
 aider --model "$MODEL" "${AIDER_ARGS[@]}"
