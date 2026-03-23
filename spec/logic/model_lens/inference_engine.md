@@ -52,8 +52,9 @@ def detect(
 
 #### Return Value
 
-A `list[DetectionResult]`, possibly empty, containing only detections whose `confidence` exceeds
-`confidence_threshold`. The list is ordered by descending confidence. Each `DetectionResult` has:
+A `list[DetectionResult]`, possibly empty, containing only detections whose `confidence` is greater
+than or equal to `confidence_threshold`. The list is ordered by descending confidence. Each
+`DetectionResult` has:
 
 - `label` — resolved human-readable string from the label map (never a raw integer index).
 - `confidence` — float in `(0.0, 1.0]`.
@@ -70,9 +71,11 @@ A `list[DetectionResult]`, possibly empty, containing only detections whose `con
 #### Rules
 
 - `detect()` must **not** mutate `frame` or any element of `target_labels`.
-- `detect()` is **not thread-safe**; callers must ensure it is invoked from a single thread only.
-- Sub-threshold detections are filtered out inside `detect()` before the result list is constructed;
-  they are never returned to the caller.
+- `detect()` is **thread-safe**; concurrent callers are serialised internally via a per-instance
+  lock acquired at the start of each call and released before returning.
+- Sub-threshold detections (those with `confidence` strictly less than `confidence_threshold`) are
+  filtered out inside `detect()` before the result list is constructed; they are never returned to
+  the caller. Detections with `confidence` exactly equal to `confidence_threshold` are **kept**.
 - `is_target` is computed inside `detect()` by checking `label in target_labels`.
 - BGR→RGB conversion, if required by the backend, is performed inside the concrete subclass
   implementation and must not modify the input `frame` array.
@@ -85,9 +88,11 @@ share the same parsing behaviour.
 #### Format
 
 - Plain text, one label per line.
-- Blank lines and whitespace-only lines are **skipped** and do not consume an index slot.
-- Leading and trailing whitespace on non-blank lines is stripped.
-- The first non-blank line maps to index `0`, the second to index `1`, and so on.
+- Every line, including blank lines and whitespace-only lines, **consumes one index slot**.
+- Leading and trailing whitespace on non-blank lines is stripped before storing the label string.
+- Blank or whitespace-only lines are stored as empty strings (`""`) in the lookup table.
+- Line 0 (the first line) maps to index `0`, line 1 to index `1`, and so on — regardless of
+  whether any line is blank.
 
 #### Example label map file
 
@@ -99,14 +104,16 @@ car
 motorcycle
 ```
 
-Parsed result: `{0: "person", 1: "bicycle", 2: "car", 3: "motorcycle"}` (blank line skipped).
+Parsed result: `{0: "person", 1: "bicycle", 2: "car", 3: "", 4: "motorcycle"}` (blank line at
+index 3 is stored as an empty string).
 
 #### Raises
 
 | Exception | Condition |
 |---|---|
 | `ConfigurationError` | `labels_path` is non-empty but the file does not exist or cannot be read |
-| `ParseError` | The file is empty after skipping blank lines (no labels could be loaded) |
+| `ConfigurationError` | The package-data fallback path cannot be resolved (e.g., package not installed correctly) |
+| `ParseError` | The file is empty (zero lines) or contains only blank/whitespace lines (no non-empty labels could be loaded) |
 
 ### `ENGINE_REGISTRY`
 
@@ -153,26 +160,39 @@ no constructor signature.
 | Parameter | Type | Source | Description |
 |---|---|---|---|
 | `model_path` | `str` | `AppConfig.model.model_path` | Absolute path to the `.pt` model file, or empty string to use the package-data default |
-| `confidence_threshold` | `float` | `AppConfig.model.confidence_threshold` | Minimum confidence for a detection to be included in results |
+| `confidence_threshold` | `float` | `AppConfig.model.confidence_threshold` | Minimum confidence (inclusive) for a detection to be included in results |
 | `labels_path` | `str` | `AppConfig.model.labels_path` | Absolute path to the label map file, or empty string to use the package-data default |
+
+#### Path Resolution for Package-Data Fallback
+
+When `model_path` or `labels_path` is an empty string, the constructor resolves the path using
+`importlib.resources` (or equivalent). If the package-data resource cannot be located (e.g., the
+package was not installed correctly or the data files are missing from the distribution),
+`ConfigurationError` is raised immediately with a message identifying which resource could not be
+found.
 
 #### Raises
 
 | Exception | Condition |
 |---|---|
 | `ConfigurationError` | `model_path` is non-empty but the file does not exist or cannot be read |
+| `ConfigurationError` | `model_path` is empty and the package-data model file cannot be resolved |
+| `ConfigurationError` | `labels_path` is empty and the package-data label map file cannot be resolved |
 | `ConfigurationError` | `confidence_threshold` does not satisfy `0.0 < value <= 1.0` |
 | `OperationError` | The model file exists but PyTorch fails to load it (e.g., corrupt file, incompatible format) |
 
 ### `detect()` Implementation Notes
 
+- The method acquires the per-instance lock at entry and releases it before returning (including
+  on exception paths), ensuring thread safety.
 - If the model requires RGB input, the subclass must convert the BGR `frame` to RGB internally
   using a copy (e.g., `frame[:, :, ::-1].copy()`); the original `frame` array must not be modified.
 - Raw integer output indices from the model are translated to label strings via the label map
   loaded by the base class.
 - If a raw index has no entry in the label map, `ParseError` is raised immediately.
-- Detections with `confidence <= confidence_threshold` are discarded before constructing
-  `DetectionResult` objects.
+- Detections with `confidence` strictly less than `confidence_threshold` are discarded before
+  constructing `DetectionResult` objects. Detections with `confidence` exactly equal to
+  `confidence_threshold` are **kept**.
 - `is_target` is set by evaluating `label in target_labels` for each surviving detection.
 - The returned list is ordered by descending `confidence`.
 
@@ -185,16 +205,18 @@ Server startup
     │
     ▼
 TorchInferenceEngine.__init__()
-    ├── resolve model_path  (package-data fallback if empty)
-    ├── resolve labels_path (package-data fallback if empty)
+    ├── resolve model_path  (package-data fallback if empty; raises ConfigurationError if unresolvable)
+    ├── resolve labels_path (package-data fallback if empty; raises ConfigurationError if unresolvable)
     ├── load label map      (base class, raises ConfigurationError / ParseError)
+    ├── initialise per-instance threading.Lock
     └── load .pt model      (raises ConfigurationError / OperationError)
     │
     ▼
-Detection Pipeline loop (single thread)
+Detection Pipeline loop (may be called from multiple threads)
     │
     ├── frame = CameraCapture.read()
     ├── results = engine.detect(frame.data, runtime_config.target_labels)
+    │       └── acquires lock → runs inference → releases lock
     └── publish (frame, results) → SSE queue
 ```
 
@@ -209,8 +231,10 @@ are fixed at startup per `spec/configuration.md`).
 | Situation | Exception | Raised by |
 |---|---|---|
 | Label map file missing or unreadable | `ConfigurationError` | Base class label map loader |
+| Package-data label map file cannot be resolved | `ConfigurationError` | `TorchInferenceEngine.__init__()` |
 | Label map file has no non-blank lines | `ParseError` | Base class label map loader |
 | Model file missing or unreadable | `ConfigurationError` | `TorchInferenceEngine.__init__()` |
+| Package-data model file cannot be resolved | `ConfigurationError` | `TorchInferenceEngine.__init__()` |
 | Model file corrupt / incompatible | `OperationError` | `TorchInferenceEngine.__init__()` |
 | Raw output index not in label map | `ParseError` | `TorchInferenceEngine.detect()` |
 | PyTorch inference call fails at runtime | `OperationError` | `TorchInferenceEngine.detect()` |
@@ -222,8 +246,8 @@ All exceptions are subtypes of `ModelLensError` as defined in `spec/errors.md`.
 
 ## Constraints and Non-Goals
 
-- The engine is **not thread-safe**. The Detection Pipeline must call `detect()` from a single
-  thread only.
+- The engine is **thread-safe** via a per-instance lock; concurrent calls to `detect()` are
+  serialised automatically.
 - The engine does **not** accept runtime changes to `model_path`, `labels_path`, or
   `confidence_threshold`. These are fixed at startup.
 - The engine does **not** perform any frame annotation or rendering. Annotated output is the
