@@ -159,7 +159,6 @@ view into a shared buffer.
 |---|---|---|
 | `data` | `numpy.ndarray` | Shape `(H, W, 3)`, dtype `uint8`, colour space **BGR** |
 | `timestamp` | `float` | POSIX timestamp (seconds since 1970-01-01T00:00:00Z) at the moment of frame capture |
-| `frame_index` | `int` | Monotonically increasing, `>= 0`; resets to `0` when the camera source is recreated |
 | `source` | `str` | Human-readable identifier for the camera source (e.g., `"local:0"` or `"rtsp://..."`) |
 
 ### Rules
@@ -172,8 +171,6 @@ view into a shared buffer.
   backend, is the responsibility of `InferenceEngine` and must not modify the `Frame.data` array.
 - `timestamp` is a POSIX timestamp (float, seconds since 1970-01-01T00:00:00 UTC). It must be
   captured immediately after a successful frame read and must have sub-second precision.
-- `frame_index` is owned and incremented by `CameraCapture`. It resets to `0` each time a new
-  `CameraCapture` instance is created (i.e., after a camera source change).
 - `source` is set by `CameraCapture` at construction time and reflects the active source
   (e.g., `"local:0"` for `LocalCameraConfig(device_index=0)`, or the full RTSP URL for
   `RtspCameraConfig`).
@@ -184,7 +181,6 @@ view into a shared buffer.
 Frame(
     data=numpy_bgr_array,          # shape (480, 640, 3), dtype uint8
     timestamp=1748000400.123456,   # POSIX timestamp with sub-second precision
-    frame_index=42,
     source="local:0",
 )
 ```

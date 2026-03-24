@@ -31,7 +31,6 @@ public contract; concrete subclasses implement it independently.
 - Declare `read()` as the sole public frame-acquisition method.
 - Declare `close()` as the public resource-release method.
 - Support context manager protocol (`__enter__` / `__exit__`) for deterministic lifecycle management.
-- Own the `frame_index` counter; increment it on every successful `read()` call.
 
 ### Constructor
 
@@ -62,7 +61,6 @@ A `Frame` with:
 |---|---|
 | `data` | `numpy.ndarray`, shape `(H, W, 3)`, dtype `uint8`, colour space BGR; always a `.copy()` of the OpenCV buffer |
 | `timestamp` | POSIX timestamp (float, seconds since 1970-01-01T00:00:00 UTC) with sub-second precision, captured immediately after a successful `cv2.VideoCapture.read()` |
-| `frame_index` | Current value of the instance counter, then incremented by 1 |
 | `source` | Human-readable source identifier set at construction time (see per-subclass rules below) |
 
 #### Raises
@@ -89,9 +87,6 @@ When `cv2.VideoCapture.read()` returns `(False, None)` or an otherwise invalid f
 | 2 (retry 1) | 1 s + jitter |
 | 3 (retry 2) | 2 s + jitter |
 | — (give up) | 4 s + jitter elapsed, then raise `OperationError` |
-
-`frame_index` is **not** reset during reconnection; it is only reset when a new `CameraCapture`
-instance is constructed.
 
 ### Abstract Method: `close()`
 
@@ -148,12 +143,11 @@ def __init__(self, config: LocalCameraConfig) -> None:
 
 #### Behaviour
 
-1. Initialises `frame_index` to `0`.
-2. Sets `source` to `f"local:{config.device_index}"`.
-3. Opens `cv2.VideoCapture(config.device_index)` immediately.
-4. If the handle is not opened successfully (`cap.isOpened()` returns `False`), raises
+1. Sets `source` to `f"local:{config.device_index}"`.
+2. Opens `cv2.VideoCapture(config.device_index)` immediately.
+3. If the handle is not opened successfully (`cap.isOpened()` returns `False`), raises
    `DeviceNotFoundError` immediately — **no retry at construction time**.
-5. Initialises the per-instance `threading.Lock`.
+4. Initialises the per-instance `threading.Lock`.
 
 #### Raises
 
@@ -166,7 +160,7 @@ def __init__(self, config: LocalCameraConfig) -> None:
 - Acquires the per-instance lock.
 - Calls `cap.read()` on the existing handle.
 - On failure, applies the shared retry strategy (re-opens handle, waits with jitter).
-- On success, copies the frame buffer, constructs and returns a `Frame`, increments `frame_index`.
+- On success, copies the frame buffer, constructs and returns a `Frame`.
 - Releases the lock before returning or raising.
 
 ### `close()` Implementation Notes
@@ -205,12 +199,11 @@ def __init__(self, config: RtspCameraConfig) -> None:
 #### Behaviour
 
 1. Validates `rtsp_url` format; raises `ValidationError` if invalid.
-2. Initialises `frame_index` to `0`.
-3. Sets `source` to the full RTSP URL string.
-4. Opens `cv2.VideoCapture(config.rtsp_url)` immediately.
-5. If the handle is not opened successfully (`cap.isOpened()` returns `False`), raises
+2. Sets `source` to the full RTSP URL string.
+3. Opens `cv2.VideoCapture(config.rtsp_url)` immediately.
+4. If the handle is not opened successfully (`cap.isOpened()` returns `False`), raises
    `DeviceNotFoundError` immediately — **no retry at construction time**.
-6. Initialises the per-instance `threading.Lock`.
+5. Initialises the per-instance `threading.Lock`.
 
 #### Raises
 
@@ -242,7 +235,7 @@ LocalCamera.__init__(config) / RtspCamera.__init__(config)
     ├── validate input (RtspCamera only)
     ├── set source string
     ├── open cv2.VideoCapture handle  → DeviceNotFoundError if fails immediately
-    └── initialise threading.Lock, frame_index = 0
+    └── initialise threading.Lock
     │
     ▼
 with camera:                          ← __enter__ returns self
@@ -258,7 +251,6 @@ __exit__ → close()                    ← releases cv2.VideoCapture handle
 When the Detection Pipeline receives a camera config change:
 1. The existing `CameraCapture` instance is closed (via `close()` or context manager exit).
 2. A new `CameraCapture` subclass instance is constructed from the new `CameraConfig`.
-3. `frame_index` resets to `0` on the new instance.
 
 ---
 
@@ -283,5 +275,3 @@ All exceptions are subtypes of `ModelLensError` as defined in `spec/errors.md`.
 - `rtsps://` (TLS-secured RTSP) is out of scope for this version.
 - A single `CameraCapture` instance is used by a single Detection Pipeline; no multi-consumer
   fan-out is provided at this layer.
-- `frame_index` immutability is not enforced in code; consumers must treat `Frame.data` as
-  read-only by convention.
