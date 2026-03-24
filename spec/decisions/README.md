@@ -30,6 +30,10 @@ An ADR is not a suggestion — it is a binding constraint until explicitly super
 | [0014](0014_30fps_output_rate_cap.md) | 30 FPS output rate cap via sleep-based pacing | Accepted |
 | [0015](0015_jpeg_encoding_in_pipeline.md) | JPEG encoding inside the Detection Pipeline | Accepted |
 | [0016](0016_fatal_parse_error_exit.md) | ParseError from inference treated as fatal (sys.exit) | Accepted |
+| [0017](0017_fastapi_lifespan_over_on_event.md) | FastAPI lifespan context manager over on_event hooks | Accepted |
+| [0018](0018_pipeline_dependency_injection_via_app_state.md) | DetectionPipeline dependency injection via app.state and Depends | Accepted |
+| [0019](0019_sse_keepalive_and_idle_timeout.md) | SSE keepalive comments and 30-second server-side idle timeout | Accepted |
+| [0020](0020_pydantic_discriminated_union_for_camera_config.md) | Pydantic discriminated union for camera configuration | Accepted |
 
 ---
 
