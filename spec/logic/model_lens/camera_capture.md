@@ -61,7 +61,7 @@ A `Frame` with:
 | Field | Value |
 |---|---|
 | `data` | `numpy.ndarray`, shape `(H, W, 3)`, dtype `uint8`, colour space BGR; always a `.copy()` of the OpenCV buffer |
-| `timestamp` | `datetime.datetime` in UTC (`datetime.timezone.utc`), captured immediately after a successful `cv2.VideoCapture.read()` |
+| `timestamp` | POSIX timestamp (float, seconds since 1970-01-01T00:00:00 UTC) with sub-second precision, captured immediately after a successful `cv2.VideoCapture.read()` |
 | `frame_index` | Current value of the instance counter, then incremented by 1 |
 | `source` | Human-readable source identifier set at construction time (see per-subclass rules below) |
 
