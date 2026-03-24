@@ -21,6 +21,15 @@ An ADR is not a suggestion — it is a binding constraint until explicitly super
 | [0005](0005_sse_over_websocket.md) | SSE over WebSocket for the live stream | Accepted |
 | [0006](0006_config_applied_in_loop.md) | Config changes applied in-loop | Accepted |
 | [0007](0007_opencv_for_camera_sources.md) | OpenCV for both camera source types | Accepted |
+| [0008](0008_concurrency_and_thread_safety.md) | Concurrency and thread safety strategy | Accepted |
+| [0009](0009_frame_data_ownership_and_copy_strategy.md) | Frame data ownership and copy strategy | Accepted |
+| [0010](0010_label_map_empty_line_handling.md) | Label map empty line handling | Accepted |
+| [0011](0011_retry_and_recovery_mechanism_design.md) | Retry and recovery mechanism design | Accepted |
+| [0012](0012_package_data_resource_resolution.md) | Package data resource resolution and fallback | Accepted |
+| [0013](0013_bounded_queue_drop_oldest_strategy.md) | Bounded result queue with drop-oldest eviction | Accepted |
+| [0014](0014_30fps_output_rate_cap.md) | 30 FPS output rate cap via sleep-based pacing | Accepted |
+| [0015](0015_jpeg_encoding_in_pipeline.md) | JPEG encoding inside the Detection Pipeline | Accepted |
+| [0016](0016_fatal_parse_error_exit.md) | ParseError from inference treated as fatal (sys.exit) | Accepted |
 
 ---
 
