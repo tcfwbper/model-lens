@@ -87,7 +87,7 @@ The application is composed of three routers mounted on the root FastAPI app:
 | Router module | Mount prefix | Responsibility |
 |---|---|---|
 | `config_router` | `/config` | Config API (CRUD for `RuntimeConfig`) |
-| `stream_router` | (none) | Stream API (`/stream`, `/snapshot`) |
+| `stream_router` | (none) | Stream API (`/stream`) |
 | `health_router` | (none) | Health check (`/healthz`) |
 
 Static assets are mounted separately (see Static Assets section).
@@ -261,60 +261,23 @@ comment line to keep the connection alive and prevent proxy timeouts:
 Keepalive comments are sent at most once per second of idle time. They carry no data and
 are ignored by SSE clients.
 
-**Server-side timeout:**
+**Server-side idle timeout (per connection):**
 
-The SSE connection is closed by the server after **30 seconds of continuous idle time**
-(no frame published to the queue). "Idle" means the pipeline has produced no
-`PipelineResult` for 30 consecutive seconds — keepalive comments are sent during this
-period but do not reset the idle timer. When the timeout is reached, the server closes
-the response stream cleanly (no error event). The client's built-in SSE reconnect
-behaviour will re-establish the connection.
+The SSE idle timeout is tracked **per connection**. Each new client connection starts its
+own independent idle timer. The timer is reset to zero whenever a new `PipelineResult` is
+successfully dequeued and sent to that client.
+
+The connection is closed by the server after **30 seconds of continuous idle time** on that
+connection (no frame dequeued and sent within 30 consecutive seconds). Keepalive comments
+sent during the idle period do **not** reset the timer. When the timeout is reached, the
+server closes the response stream cleanly (no error event). The client's built-in SSE
+reconnect behaviour will re-establish the connection, which starts a fresh idle timer.
 
 **Disconnect handling:**
 
 If the client disconnects before the server closes the stream, the server detects the
 disconnect via the ASGI `disconnect` signal (or `asyncio.CancelledError` on the generator)
 and exits the streaming coroutine cleanly without logging an error.
-
----
-
-### `GET /snapshot`
-
-Returns a single frame result in the same JSON format as one SSE event payload, as a
-standard JSON HTTP response.
-
-**Behaviour:**
-
-- Attempts a non-blocking read from the `DetectionPipeline` result queue
-  (`queue.Queue.get_nowait()`), consuming the item.
-- If the queue is empty (no frame has been published yet, or the pipeline is not running),
-  returns `202 Accepted`.
-
-**Response `200 OK`** (`application/json`):
-
-```json
-{
-  "jpeg_b64": "<base64-encoded JPEG string>",
-  "timestamp": 1748000400.123,
-  "source": "local:0",
-  "detections": [
-    {
-      "label": "cat",
-      "confidence": 0.87,
-      "bounding_box": [0.1, 0.2, 0.4, 0.6],
-      "is_target": true
-    }
-  ]
-}
-```
-
-**Response `202 Accepted`** (queue empty or pipeline not running):
-
-```json
-{
-  "detail": "No frame available"
-}
-```
 
 ---
 
@@ -347,9 +310,12 @@ using `importlib.resources` (or equivalent package-data resolution).
 **Rules:**
 
 - `GET /` serves `index.html` directly (not a redirect). The response includes an `ETag`
-  header derived from the file's content hash to enable browser caching.
-- All other unmatched paths that do not begin with `/config`, `/stream`, `/snapshot`,
-  `/healthz`, or `/static` fall through to a `404 Not Found` response (FastAPI default).
+  header computed as the **MD5 hex digest** of the file's raw byte content
+  (e.g., `ETag: "d41d8cd98f00b204e9800998ecf8427e"`). The value is a quoted string per
+  the HTTP specification. This enables browser caching and conditional `GET` requests via
+  `If-None-Match`.
+- All other unmatched paths that do not begin with `/config`, `/stream`, `/healthz`, or
+  `/static` fall through to a `404 Not Found` response (FastAPI default).
 - `StaticFiles` is mounted at `/static` and serves the compiled JS, CSS, and other assets
   from `dist/static/`.
 - If the `dist/` directory or `dist/index.html` cannot be resolved at startup (package not
@@ -416,7 +382,7 @@ class DetectionResultResponse(BaseModel):
 
 ### `FrameEventResponse`
 
-Shared by both `GET /snapshot` and the SSE event payload:
+Used by the SSE event payload:
 
 ```python
 class FrameEventResponse(BaseModel):
@@ -453,10 +419,23 @@ All error responses use FastAPI's standard `HTTPException` shape:
 { "detail": "<human-readable message>" }
 ```
 
-Custom error messages are used for domain-specific failures (e.g., `"No frame available"`).
+Custom error messages are used for domain-specific failures.
 Pydantic validation errors use FastAPI's default `422` response body (array of error
 objects under `"detail"`).
 Any unhandled exceptions raised in the application layer or unexpected server failures automatically result in a `500 Internal Server Error` response.
+
+---
+
+## HTTP Status Code Map
+
+The translation from internal failures to HTTP codes must follow these mappings:
+
+| Status Code | Condition | Meaning |
+|---|---|---|
+| `400 Bad Request` | Malformed request body | Client sent invalid payload format (e.g., bad JSON) |
+| `404 Not Found` | Unknown path or resource | Client requested a non-existent URL |
+| `422 Unprocessable Entity` | Data validation fails | Request is grammatically correct but semantically invalid |
+| `500 Internal Server Error` | Unexpected server failure | Unhandled exceptions in the application layer |
 
 ---
 
@@ -484,7 +463,7 @@ src/model_lens/
 ├── routers/
 │   ├── __init__.py
 │   ├── config.py   ← Config API router (/config)
-│   ├── stream.py   ← Stream API router (/stream, /snapshot)
+│   ├── stream.py   ← Stream API router (/stream)
 │   └── health.py   ← Health check router (/healthz)
 └── ...
 ```

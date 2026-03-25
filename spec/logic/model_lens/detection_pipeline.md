@@ -45,7 +45,8 @@ A single published output produced by one successful frame iteration.
 - Maintain the current `RuntimeConfig` in a thread-safe slot; expose a setter for the Config API.
 - Publish `PipelineResult` objects to a bounded `queue.Queue`; drop the oldest item when the
   queue is full.
-- Enforce a maximum output rate of 30 FPS; drop source frames that arrive faster than this cap.
+- Enforce a maximum output rate of 30 FPS; use interruptible waits so the pipeline can react
+  promptly to stop signals and config changes.
 - Handle camera errors gracefully: clear the `CameraCapture` instance and wait for a new camera
   configuration from the Config API.
 - Shut down gracefully in the correct order when the application exits.
@@ -80,7 +81,8 @@ def __init__(
 5. Initialises a `threading.Event` (`_stop_event`) used to signal the background thread to exit.
 6. Initialises a `threading.Event` (`_camera_changed_event`) used to signal that a new camera
    configuration has been set by the Config API.
-7. Does **not** start the background thread; `start()` must be called explicitly.
+7. Initialises a `bool` flag (`_started`) to `False`, used to guard against double-start.
+8. Does **not** start the background thread; `start()` must be called explicitly.
 
 #### Raises
 
@@ -93,8 +95,14 @@ internally (see point 2 above).
 
 #### `start() -> None`
 
-Starts the background `threading.Thread` that runs the frame loop. Must be called exactly once,
-during the FastAPI startup lifecycle hook. Calling `start()` more than once raises `RuntimeError`.
+Starts the background `threading.Thread` that runs the frame loop.
+
+**Double-start guard:** Before spawning the thread, `start()` checks the `_started` flag. If
+`_started` is already `True`, it raises `RuntimeError` immediately with the message
+`"Pipeline is already running"`. The check and the flag assignment are performed before the
+thread is created or started, so no thread is ever spawned on a double-call.
+
+Must be called exactly once, during the FastAPI startup lifecycle hook.
 
 #### `stop() -> None`
 
@@ -138,7 +146,7 @@ loop:
     ① Check _stop_event → exit if set
     ② Check _camera_changed_event → recreate CameraCapture if set
     ③ If no active CameraCapture → wait for _camera_changed_event, then go to ①
-    ④ FPS throttle check → drop frame if within minimum inter-frame interval
+    ④ FPS throttle check → interruptible wait if within minimum inter-frame interval
     ⑤ frame = camera.read()
     ⑥ Convert BGR → RGB (copy; do not modify Frame.data)
     ⑦ jpeg_bytes = cv2.imencode(".jpg", rgb_frame)
@@ -171,13 +179,16 @@ loop:
   This avoids a busy-wait spin while the user has not yet supplied a valid camera config.
 
 **④ FPS throttle**
-- The pipeline tracks `_last_frame_time` (POSIX timestamp of the last successfully published
+- The pipeline tracks `_last_frame_time` (monotonic timestamp of the last successfully published
   frame).
 - Minimum inter-frame interval: `1.0 / 30` seconds (~33.3 ms).
-- If `time.monotonic() - _last_frame_time < min_interval`, the pipeline calls
-  `time.sleep(remaining)` to pace itself, then continues.
-- This cap applies to the **output** rate. If the source delivers frames slower than 30 FPS,
-  the pipeline runs at the source rate with no artificial delay.
+- If `time.monotonic() - _last_frame_time < min_interval`, the pipeline computes the remaining
+  wait time and calls `_stop_event.wait(timeout=remaining)` instead of `time.sleep(remaining)`.
+  This makes the throttle wait **interruptible**: if `_stop_event` is set during the wait, the
+  loop exits promptly at the next iteration's stop check (step ①) without waiting for the full
+  interval to elapse.
+- If the source delivers frames slower than 30 FPS, the pipeline runs at the source rate with
+  no artificial delay.
 
 **⑤ Frame read**
 - Calls `camera.read()` (blocking).
@@ -233,10 +244,12 @@ FastAPI startup hook
     ▼
 DetectionPipeline.__init__(engine, initial_config)
     ├── construct initial CameraCapture (or set to None on DeviceNotFoundError)
-    ├── initialise queue, locks, events
+    ├── initialise queue, locks, events, _started flag
     │
     ▼
 DetectionPipeline.start()
+    ├── check _started flag → raise RuntimeError("Pipeline is already running") if True
+    ├── set _started = True
     └── spawn background threading.Thread → enters frame loop
     │
     ▼
@@ -270,6 +283,7 @@ Web Server tears down InferenceEngine (outside pipeline responsibility)
 | `queue.Queue` | Thread-safe by design (`queue.Queue` is internally synchronised) |
 | `_stop_event` | `threading.Event` (thread-safe) |
 | `_camera_changed_event` | `threading.Event` (thread-safe) |
+| `_started` flag | Set once in `start()` before thread spawn; read in `start()` only; no concurrent access after startup |
 
 ---
 
@@ -277,6 +291,7 @@ Web Server tears down InferenceEngine (outside pipeline responsibility)
 
 | Situation | Action |
 |---|---|
+| `start()` called more than once | Raise `RuntimeError("Pipeline is already running")` immediately, before any thread is spawned |
 | `DeviceNotFoundError` at `CameraCapture` construction (init or loop) | Log `ERROR`, set camera to `None`, wait for new config |
 | `OperationError` from `camera.read()` (all retries exhausted) | Log `ERROR`, close and discard `CameraCapture`, set to `None`, wait for new config |
 | `cv2.imencode` failure | Log `WARNING`, skip frame, continue loop |
@@ -284,7 +299,7 @@ Web Server tears down InferenceEngine (outside pipeline responsibility)
 | `ParseError` from `engine.detect()` | Log `CRITICAL`, call `sys.exit(1)` |
 
 All exceptions are subtypes of `ModelLensError` as defined in `spec/errors.md`, except
-`sys.exit(1)` which terminates the process.
+`RuntimeError` (double-start guard) and `sys.exit(1)` which terminates the process.
 
 ---
 
