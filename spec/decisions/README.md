@@ -34,6 +34,8 @@ An ADR is not a suggestion — it is a binding constraint until explicitly super
 | [0018](0018_pipeline_dependency_injection_via_app_state.md) | DetectionPipeline dependency injection via app.state and Depends | Accepted |
 | [0019](0019_sse_keepalive_and_idle_timeout.md) | SSE keepalive comments and 30-second server-side idle timeout | Accepted |
 | [0020](0020_pydantic_discriminated_union_for_camera_config.md) | Pydantic discriminated union for camera configuration | Accepted |
+| [0021](0021_stdlib_tomllib_for_config.md) | Standard library tomllib for configuration parsing | Accepted |
+| [0022](0022_custom_exception_hierarchy_and_single_string_message.md) | Custom exception hierarchy with single string message | Accepted |
 
 ---
 
