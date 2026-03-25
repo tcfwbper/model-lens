@@ -288,7 +288,7 @@ standard JSON HTTP response.
 - Attempts a non-blocking read from the `DetectionPipeline` result queue
   (`queue.Queue.get_nowait()`), consuming the item.
 - If the queue is empty (no frame has been published yet, or the pipeline is not running),
-  returns `503 Service Unavailable`.
+  returns `202 Accepted`.
 
 **Response `200 OK`** (`application/json`):
 
@@ -308,7 +308,7 @@ standard JSON HTTP response.
 }
 ```
 
-**Response `503 Service Unavailable`** (queue empty or pipeline not running):
+**Response `202 Accepted`** (queue empty or pipeline not running):
 
 ```json
 {
@@ -456,6 +456,7 @@ All error responses use FastAPI's standard `HTTPException` shape:
 Custom error messages are used for domain-specific failures (e.g., `"No frame available"`).
 Pydantic validation errors use FastAPI's default `422` response body (array of error
 objects under `"detail"`).
+Any unhandled exceptions raised in the application layer or unexpected server failures automatically result in a `500 Internal Server Error` response.
 
 ---
 
