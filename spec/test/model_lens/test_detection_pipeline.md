@@ -355,6 +355,23 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 
 ---
 
+## 11. End-to-End — Recovery from Initial `DeviceNotFoundError`
+
+> **Note:** These tests start the real background thread via `pipeline.start()`. The pipeline is
+> constructed with `LocalCamera` patched to raise `DeviceNotFoundError`, so `_camera` is `None`
+> at startup and the loop immediately enters the `_camera_changed_event.wait` path. The mock is
+> then reconfigured to succeed before `update_config` is called. `pipeline.stop()` is always
+> called in a `finally` block.
+
+### 11.1 Camera Recovered via `update_config`
+
+| Test ID | Description | Input | Expected |
+|---|---|---|---|
+| `test_recovery_from_init_failure_produces_results` | When the pipeline starts with no camera (due to `DeviceNotFoundError` at init), calling `update_config()` with a working config causes the loop to recreate the camera and eventually publish a `PipelineResult` | construct pipeline with `LocalCamera` patched to raise `DeviceNotFoundError`; call `start()`; reconfigure the mock so `LocalCamera` succeeds and returns `mock_camera`; call `update_config(RuntimeConfig())`; drain the queue | `pipeline.get_queue().get(timeout=2)` returns a `PipelineResult` without raising `queue.Empty` |
+| `test_recovery_from_init_failure_camera_changed_event_cleared` | After successful recovery the `_camera_changed_event` is no longer set | same setup; wait until at least one result is received | `pipeline._camera_changed_event.is_set() is False` after the first result appears on the queue |
+
+---
+
 ## Summary Table
 
 | Entity / Behaviour | Test Count (approx.) | Key Concerns |
@@ -379,3 +396,4 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | End-to-End — FPS cap | 1 | actual output rate ≤ 30 FPS over 1-second window |
 | Concurrency — `update_config` | 3 | no exception, final config valid, event set |
 | Concurrency — `stop()` | 2 | clean join, throttle wait interrupted |
+| End-to-End — init-failure recovery | 2 | result published after `update_config`, event cleared after recovery |

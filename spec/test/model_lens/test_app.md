@@ -189,9 +189,12 @@ def client(mock_pipeline, tmp_path):
 
 ### Fixture: `pipeline_result_queue`
 
-Tests in this section use a helper that injects a pre-populated `queue.SimpleQueue` into
-`mock_pipeline.get_result_queue.return_value`. Each item in the queue is a `PipelineResult`-like
+Tests in this section use a helper that injects a pre-populated `queue.Queue` into
+`mock_pipeline.get_queue.return_value`. Each item in the queue is a `PipelineResult`-like
 `MagicMock` with `jpeg_bytes`, `timestamp`, `source`, and `detections` attributes set.
+
+> **Note:** The stream router must call `pipeline.get_queue()` — exactly this method name. See
+> Section 7.2 for the explicit contract test that catches any name drift.
 
 ```python
 @pytest.fixture
@@ -319,6 +322,16 @@ def static_client(mock_pipeline, tmp_path):
 | `test_get_pipeline_returns_pipeline_from_app_state` | `get_pipeline` returns the `DetectionPipeline` stored in `app.state` | `app.state.pipeline = mock_pipeline`; call `get_pipeline(request)` directly | return value is `mock_pipeline` |
 | `test_get_pipeline_used_by_config_router` | Config router uses `get_pipeline` dependency; the pipeline from `app.state` is the one whose `get_config` is called | `GET /config` with `mock_pipeline` in `app.state` | `mock_pipeline.get_config.call_count == 1` |
 
+### 7.2 Queue Method Contract
+
+> **Note:** `DetectionPipeline.get_queue()` is the single canonical method name for obtaining
+> the result queue. The stream router and the pipeline must agree on this name; a silent rename
+> on either side breaks the SSE stream without a compile-time error.
+
+| Test ID | Description | Input | Expected |
+|---|---|---|---|
+| `test_stream_router_calls_get_queue` | The stream router retrieves the result queue via `pipeline.get_queue()` and never calls `get_result_queue()` or any other variant | `GET /stream` with `mock_pipeline` in `app.state`; `mock_pipeline.get_queue.return_value` is a `queue.Queue` containing one result | `mock_pipeline.get_queue.call_count >= 1`; `mock_pipeline.get_result_queue.call_count == 0` |
+
 ---
 
 ## 8. Lifespan — Startup and Shutdown
@@ -444,6 +457,6 @@ def lifespan_mocks(tmp_path):
 | `PUT /config/labels` | 11 | labels update, `update_config` called, field preservation, validation failures |
 | `GET /stream` | 20 | event format, base64, keepalive, idle timeout, disconnect |
 | Static assets | 9 | `index.html` body, ETag MD5, quoted ETag, static files, 404 |
-| Dependency injection | 2 | `get_pipeline` returns correct instance, used by router |
+| Dependency injection | 3 | `get_pipeline` returns correct instance, used by router, stream router calls `get_queue()` not `get_result_queue()` |
 | Lifespan startup/shutdown | 14 | construction order, `start`/`stop`/`teardown` calls, `sys.exit(1)` on failures |
 | Schemas | 13 | Pydantic model validation, discriminated union, boundary values |

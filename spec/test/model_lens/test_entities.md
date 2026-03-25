@@ -182,10 +182,15 @@ import time
 | Test ID | Description | Expected |
 |---|---|---|
 | `test_frame_data_is_independent_of_original_array` | Mutating the original array after `Frame` construction does not affect `Frame.data` | Create `arr`; construct `Frame(data=arr.copy(), ...)`; mutate `arr`; assert `instance.data` is unchanged |
+| `test_frame_init_stores_array_without_copying` | `Frame.__init__` stores the passed-in array reference directly — it does **not** call `.copy()` internally | Create `arr`; construct `Frame(data=arr, ...)`; assert `frame.data is arr` (identity, not just equality) |
 
 > **Note:** `CameraCapture` is responsible for calling `.copy()` before constructing `Frame`.
-> This test verifies that if a copy was made, the frame data is independent — it does not test
-> that `Frame.__init__` itself calls `.copy()`.
+> `test_frame_data_is_independent_of_original_array` passes a pre-copied array to confirm that
+> once a copy has been made the data is independent.
+> `test_frame_init_stores_array_without_copying` guards the inverse: `Frame.__init__` must not
+> silently copy the array. Without this test, a change that adds `.copy()` inside `Frame.__init__`
+> would pass all camera-capture tests while violating the architectural contract that copy
+> responsibility belongs exclusively to `CameraCapture`.
 
 ### 6.3 Read-Only Convention
 
