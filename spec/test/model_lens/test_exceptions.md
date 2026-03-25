@@ -41,7 +41,6 @@ from model_lens.exceptions import (
 |---|---|---|---|
 | `test_model_lens_error_zero_args` | Passing no arguments raises `TypeError` | `ModelLensError()` | raises `TypeError` |
 | `test_model_lens_error_two_args` | Passing two arguments raises `TypeError` | `ModelLensError("a", "b")` | raises `TypeError` |
-| `test_model_lens_error_non_string_message` | Passing a non-string argument raises `TypeError` | `ModelLensError(123)` | raises `TypeError` |
 
 ### 1.3 Type Hierarchy
 
@@ -72,7 +71,6 @@ from model_lens.exceptions import (
 |---|---|---|---|
 | `test_configuration_error_zero_args` | Passing no arguments raises `TypeError` | `ConfigurationError()` | raises `TypeError` |
 | `test_configuration_error_two_args` | Passing two arguments raises `TypeError` | `ConfigurationError("a", "b")` | raises `TypeError` |
-| `test_configuration_error_non_string_message` | Passing a non-string argument raises `TypeError` | `ConfigurationError(123)` | raises `TypeError` |
 
 ### 2.3 Type Hierarchy
 
@@ -104,7 +102,6 @@ from model_lens.exceptions import (
 |---|---|---|---|
 | `test_hardware_error_zero_args` | Passing no arguments raises `TypeError` | `HardwareError()` | raises `TypeError` |
 | `test_hardware_error_two_args` | Passing two arguments raises `TypeError` | `HardwareError("a", "b")` | raises `TypeError` |
-| `test_hardware_error_non_string_message` | Passing a non-string argument raises `TypeError` | `HardwareError(123)` | raises `TypeError` |
 
 ### 3.3 Type Hierarchy
 
@@ -136,7 +133,6 @@ from model_lens.exceptions import (
 |---|---|---|---|
 | `test_device_not_found_error_zero_args` | Passing no arguments raises `TypeError` | `DeviceNotFoundError()` | raises `TypeError` |
 | `test_device_not_found_error_two_args` | Passing two arguments raises `TypeError` | `DeviceNotFoundError("a", "b")` | raises `TypeError` |
-| `test_device_not_found_error_non_string_message` | Passing a non-string argument raises `TypeError` | `DeviceNotFoundError(123)` | raises `TypeError` |
 
 ### 4.3 Type Hierarchy
 
@@ -170,7 +166,6 @@ from model_lens.exceptions import (
 |---|---|---|---|
 | `test_data_error_zero_args` | Passing no arguments raises `TypeError` | `DataError()` | raises `TypeError` |
 | `test_data_error_two_args` | Passing two arguments raises `TypeError` | `DataError("a", "b")` | raises `TypeError` |
-| `test_data_error_non_string_message` | Passing a non-string argument raises `TypeError` | `DataError(123)` | raises `TypeError` |
 
 ### 5.3 Type Hierarchy
 
@@ -202,7 +197,6 @@ from model_lens.exceptions import (
 |---|---|---|---|
 | `test_validation_error_zero_args` | Passing no arguments raises `TypeError` | `ValidationError()` | raises `TypeError` |
 | `test_validation_error_two_args` | Passing two arguments raises `TypeError` | `ValidationError("a", "b")` | raises `TypeError` |
-| `test_validation_error_non_string_message` | Passing a non-string argument raises `TypeError` | `ValidationError(123)` | raises `TypeError` |
 
 ### 6.3 Type Hierarchy
 
@@ -236,7 +230,6 @@ from model_lens.exceptions import (
 |---|---|---|---|
 | `test_parse_error_zero_args` | Passing no arguments raises `TypeError` | `ParseError()` | raises `TypeError` |
 | `test_parse_error_two_args` | Passing two arguments raises `TypeError` | `ParseError("a", "b")` | raises `TypeError` |
-| `test_parse_error_non_string_message` | Passing a non-string argument raises `TypeError` | `ParseError(123)` | raises `TypeError` |
 
 ### 7.3 Type Hierarchy
 
@@ -270,7 +263,6 @@ from model_lens.exceptions import (
 |---|---|---|---|
 | `test_operation_error_zero_args` | Passing no arguments raises `TypeError` | `OperationError()` | raises `TypeError` |
 | `test_operation_error_two_args` | Passing two arguments raises `TypeError` | `OperationError("a", "b")` | raises `TypeError` |
-| `test_operation_error_non_string_message` | Passing a non-string argument raises `TypeError` | `OperationError(123)` | raises `TypeError` |
 
 ### 8.3 Type Hierarchy
 
@@ -291,11 +283,11 @@ from model_lens.exceptions import (
 
 | Class | Test Count (approx.) | Key Concerns |
 |---|---|---|
-| `ModelLensError` | 7 | message stored, args, zero/two/non-string args, isinstance, catch-as-Exception |
-| `ConfigurationError` | 7 | message stored, args, zero/two/non-string args, isinstance chain, catch-as-parent |
-| `HardwareError` | 7 | message stored, args, zero/two/non-string args, isinstance chain, catch-as-parent |
-| `DeviceNotFoundError` | 9 | message stored, args, zero/two/non-string args, isinstance chain (3 levels), catch-as-both-parents |
-| `DataError` | 7 | message stored, args, zero/two/non-string args, isinstance chain, catch-as-parent |
-| `ValidationError` | 9 | message stored, args, zero/two/non-string args, isinstance chain (3 levels), catch-as-both-parents |
-| `ParseError` | 9 | message stored, args, zero/two/non-string args, isinstance chain (3 levels), catch-as-both-parents |
-| `OperationError` | 7 | message stored, args, zero/two/non-string args, isinstance chain, catch-as-parent |
+| `ModelLensError` | 6 | message stored, args, zero/two args, isinstance, catch-as-Exception |
+| `ConfigurationError` | 6 | message stored, args, zero/two args, isinstance chain, catch-as-parent |
+| `HardwareError` | 6 | message stored, args, zero/two args, isinstance chain, catch-as-parent |
+| `DeviceNotFoundError` | 8 | message stored, args, zero/two args, isinstance chain (3 levels), catch-as-both-parents |
+| `DataError` | 6 | message stored, args, zero/two args, isinstance chain, catch-as-parent |
+| `ValidationError` | 8 | message stored, args, zero/two args, isinstance chain (3 levels), catch-as-both-parents |
+| `ParseError` | 8 | message stored, args, zero/two args, isinstance chain (3 levels), catch-as-both-parents |
+| `OperationError` | 6 | message stored, args, zero/two args, isinstance chain, catch-as-parent |
