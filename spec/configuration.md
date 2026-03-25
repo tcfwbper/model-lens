@@ -176,6 +176,7 @@ Fixed at startup; cannot be changed at runtime.
 ## Implementation Notes
 
 - Config loading lives in `src/model_lens/config.py` (`ConfigLoader`, `AppConfig`).
+- `config.py` is directly responsible for parsing the `--config` command-line argument using `argparse`.
 - `AppConfig` is a frozen dataclass (`@dataclass(frozen=True)`) — configuration is immutable after startup.
 - `tomllib` (stdlib, Python 3.11+) is used for TOML parsing; no additional dependency is required.
 - `AppConfig` seeds the initial in-memory `RuntimeConfig` at server startup; from that point the

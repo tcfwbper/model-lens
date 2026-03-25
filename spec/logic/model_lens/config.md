@@ -23,24 +23,19 @@ values are guaranteed to satisfy their constraints. Downstream components (`Infe
 
 ## Public API
 
-### `load(config_path: Path | None) -> AppConfig`
+### `load() -> AppConfig`
 
 The single public entry point for configuration loading.
 
-**Arguments:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `config_path` | `Path \| None` | Absolute or relative path to a TOML config file, as parsed by the external entry point via `argparse`. `None` means no `--config` flag was supplied. |
-
 **Behaviour:**
 
-1. Resolve the effective config file path (see [Config File Resolution](#config-file-resolution)).
-2. Load and parse the TOML file if one is found (see [TOML Parsing](#toml-parsing)).
-3. Merge built-in defaults with TOML values (see [Merge Strategy](#merge-strategy)).
-4. Apply environment variable overrides key-by-key (see [Environment Variable Overrides](#environment-variable-overrides)).
-5. Resolve empty `model_path` and `labels_path` to their bundled package-data paths (see [Package-Data Path Resolution](#package-data-path-resolution)).
-6. Construct and return `AppConfig`, which triggers `validate()` in `__post_init__`.
+1. Parse the `--config` command-line argument using `argparse`.
+2. Resolve the effective config file path (see [Config File Resolution](#config-file-resolution)).
+3. Load and parse the TOML file if one is found (see [TOML Parsing](#toml-parsing)).
+4. Merge built-in defaults with TOML values (see [Merge Strategy](#merge-strategy)).
+5. Apply environment variable overrides key-by-key (see [Environment Variable Overrides](#environment-variable-overrides)).
+6. Resolve empty `model_path` and `labels_path` to their bundled package-data paths (see [Package-Data Path Resolution](#package-data-path-resolution)).
+7. Construct and return `AppConfig`, which triggers `validate()` in `__post_init__`.
 
 **Returns:** A fully validated, immutable `AppConfig` instance.
 
@@ -128,10 +123,10 @@ Validation rules mirror the constraints defined in `spec/configuration.md`.
 
 ## Config File Resolution
 
-When `load()` is called:
+When `load()` is called, it parses `sys.argv` via `argparse` to look for a `--config` flag:
 
-1. If `config_path` is not `None`, use it directly as the config file path.
-2. If `config_path` is `None`, check for `model_lens.toml` in the **current working directory**
+1. If `--config` is provided, use its value strictly as the config file path.
+2. If `--config` is omitted, check for `model_lens.toml` in the **current working directory**
    (`Path.cwd() / "model_lens.toml"`).
 3. If neither source yields a file:
    - Log a `WARNING`: `"No config file found; using built-in defaults."`
