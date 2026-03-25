@@ -112,6 +112,9 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_pipeline_init_started_flag_is_false` | `_started` flag is `False` after construction | constructed `pipeline` | `pipeline._started is False` |
 | `test_pipeline_init_stop_event_is_clear` | `_stop_event` is not set after construction | constructed `pipeline` | `pipeline._stop_event.is_set() is False` |
 | `test_pipeline_init_camera_changed_event_is_clear` | `_camera_changed_event` is not set after construction | constructed `pipeline` | `pipeline._camera_changed_event.is_set() is False` |
+| `test_pipeline_init_lock_is_created` | A `threading.Lock` is initialised for protecting the `RuntimeConfig` slot | constructed `pipeline` | `pipeline._config_lock` (or equivalent attribute) is an instance of `threading.Lock` |
+
+> **Note:** The background thread is stored as `pipeline._thread` (a `threading.Thread` instance). Tests in Sections 3 and 4 reference this attribute directly to check liveness.
 
 ### 2.2 `DeviceNotFoundError` at Construction
 
@@ -136,6 +139,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | Test ID | Description | Input | Expected |
 |---|---|---|---|
 | `test_pipeline_start_raises_on_double_start` | Calling `start()` a second time raises `RuntimeError` | call `pipeline.start()` twice | second call raises `RuntimeError` with message `"Pipeline is already running"`; then call `pipeline.stop()` to clean up |
+| `test_pipeline_start_raises_exact_message` | The `RuntimeError` raised on double-start carries the exact message `"Pipeline is already running"` | call `pipeline.start()` twice; catch the second `RuntimeError` | `str(exc) == "Pipeline is already running"`; then call `pipeline.stop()` to clean up |
 | `test_pipeline_start_no_thread_spawned_on_double_start` | No additional thread is spawned when `RuntimeError` is raised | call `pipeline.start()` twice (catching the error) | only one background thread exists; then call `pipeline.stop()` to clean up |
 
 ---
@@ -149,6 +153,8 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_pipeline_stop_sets_stop_event` | `_stop_event` is set after `stop()` | call `pipeline.start()` then `pipeline.stop()` | `pipeline._stop_event.is_set() is True` |
 | `test_pipeline_stop_joins_thread` | Background thread is no longer alive after `stop()` | call `pipeline.start()` then `pipeline.stop()` | `pipeline._thread.is_alive() is False` |
 | `test_pipeline_stop_closes_camera` | Active `CameraCapture` instance has `close()` called during `stop()` | call `pipeline.start()` then `pipeline.stop()` | `mock_camera.close.call_count >= 1` |
+| `test_pipeline_stop_closes_camera_after_join` | `camera.close()` is called only after the background thread has exited | instrument `mock_camera.close` to record whether `pipeline._thread.is_alive()` is `False` at the moment of the call | `pipeline._thread.is_alive() is False` when `mock_camera.close()` is invoked |
+| `test_pipeline_stop_does_not_close_engine` | `stop()` never calls any close/teardown method on the `InferenceEngine` | call `pipeline.start()` then `pipeline.stop()` | `mock_engine.close.call_count == 0` (and no other teardown method called) |
 
 ### 4.2 Idempotency
 
@@ -238,6 +244,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_run_one_iteration_closes_camera_on_operation_error` | `OperationError` from `camera.read()` calls `close()` on the camera | same as above | `mock_camera.close.call_count == 1` |
 | `test_run_one_iteration_logs_error_on_camera_operation_error` | `OperationError` from `camera.read()` is logged at `ERROR` level | same as above | `logging.error` (or equivalent) called at least once |
 | `test_run_one_iteration_skips_publish_on_camera_operation_error` | No result is published when `camera.read()` raises `OperationError` | same as above | `pipeline.get_queue().qsize() == 0` |
+| `test_run_one_iteration_camera_cleared_no_retry` | After `OperationError` from `camera.read()`, a subsequent call to `_run_one_iteration()` does not attempt `camera.read()` again | call `_run_one_iteration()` once (raises `OperationError`); call it again | `mock_camera.read.call_count == 1` total across both calls |
 
 ### 7.6 No Active Camera
 
@@ -245,6 +252,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 |---|---|---|---|
 | `test_run_one_iteration_does_not_read_when_no_camera` | `camera.read()` is never called when internal camera is `None` | set internal camera to `None` before calling `_run_one_iteration()` | `mock_camera.read.call_count == 0` |
 | `test_run_one_iteration_does_not_publish_when_no_camera` | No result is published when internal camera is `None` | same as above | `pipeline.get_queue().qsize() == 0` |
+| `test_run_one_iteration_waits_on_camera_changed_event_when_no_camera` | When internal camera is `None`, the loop calls `_camera_changed_event.wait(timeout=1.0)` | set internal camera to `None`; patch `_camera_changed_event.wait` | `_camera_changed_event.wait` called with `timeout=1.0` |
 
 ### 7.7 Camera Changed Event — Camera Recreation
 
@@ -277,6 +285,24 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_run_one_iteration_throttle_timeout_is_remaining_interval` | The timeout passed to `_stop_event.wait` is the remaining interval, not the full interval | patch `time.monotonic` to return `_last_frame_time + 0.020` | `_stop_event.wait` called with `timeout` approximately `1/30 - 0.020` (within 1 ms tolerance) |
 | `test_run_one_iteration_no_throttle_when_slow_source` | When elapsed time exceeds `1/30` s, `_stop_event.wait` is NOT called for throttling | patch `time.monotonic` to return `_last_frame_time + 0.050` (50 ms elapsed) | `_stop_event.wait` not called (or called zero times for throttle purposes) |
 | `test_run_one_iteration_updates_last_frame_time_after_publish` | `_last_frame_time` is updated to the current monotonic time after a successful publish | patch `time.monotonic` to return a known value `T` at publish time | `pipeline._last_frame_time == T` after the iteration |
+
+### 7.10 Lock Behaviour
+
+> **Note:** These tests verify that the `RuntimeConfig` lock is used correctly in the frame loop. `_run_one_iteration()` is called directly. The lock is inspected via `unittest.mock` to confirm acquire/release ordering relative to `engine.detect()`.
+
+| Test ID | Description | Input | Expected |
+|---|---|---|---|
+| `test_run_one_iteration_releases_lock_before_detect` | The `RuntimeConfig` lock is released before `engine.detect()` is called | patch the lock's `release` method and `engine.detect` to record call order | `lock.release` is called before `engine.detect` in the call sequence |
+| `test_run_one_iteration_detect_called_without_lock` | `engine.detect()` is not called while the lock is held | patch `engine.detect` to assert `lock.locked() is False` at call time | no `AssertionError` raised inside `engine.detect` |
+
+### 7.11 Queue Method Contracts
+
+> **Note:** `queue.Queue.get_nowait` and `queue.Queue.put_nowait` are patched to verify the pipeline uses non-blocking calls exclusively when publishing results.
+
+| Test ID | Description | Input | Expected |
+|---|---|---|---|
+| `test_run_one_iteration_uses_put_nowait` | The pipeline publishes results via `put_nowait`, not `put` | patch `queue.Queue.put_nowait` and `queue.Queue.put` on the pipeline's queue | `put_nowait` called once; `put` never called |
+| `test_run_one_iteration_uses_get_nowait_on_full_queue` | When the queue is full, the oldest item is discarded via `get_nowait`, not `get` | fill queue to `maxsize=5`; patch `queue.Queue.get_nowait` and `queue.Queue.get` | `get_nowait` called once; `get` never called |
 
 ---
 
@@ -318,19 +344,21 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | Entity / Behaviour | Test Count (approx.) | Key Concerns |
 |---|---|---|
 | `PipelineResult` | 6 | all fields stored, frozen |
-| `DetectionPipeline.__init__` | 10 | engine/config stored, camera constructed, queue size, flags/events cleared, `DeviceNotFoundError` handled |
-| `DetectionPipeline.start` | 4 | `_started` flag, thread spawned, double-start guard, no extra thread on double-start |
-| `DetectionPipeline.stop` | 5 | `_stop_event` set, thread joined, camera closed, idempotent, safe with no camera |
+| `DetectionPipeline.__init__` | 11 | engine/config stored, camera constructed, queue size, flags/events cleared, lock initialised, `DeviceNotFoundError` handled |
+| `DetectionPipeline.start` | 5 | `_started` flag, thread spawned, double-start guard, exact error message, no extra thread on double-start |
+| `DetectionPipeline.stop` | 7 | `_stop_event` set, thread joined, camera closed after join, engine not closed, idempotent, safe with no camera |
 | `DetectionPipeline.update_config` | 3 | config replaced, event set, returns immediately |
 | `DetectionPipeline.get_queue` | 2 | returns `queue.Queue`, same object each call |
 | `_run_one_iteration` — happy path | 8 | frame read, result published, all fields correct, detect args |
 | `_run_one_iteration` — BGR→RGB | 2 | channels reversed, original not modified |
 | `_run_one_iteration` — JPEG failure | 2 | frame skipped, warning logged |
 | `_run_one_iteration` — inference errors | 4 | `OperationError` skips, `ParseError` exits with code 1, both logged |
-| `_run_one_iteration` — camera read error | 4 | camera cleared, closed, error logged, no publish |
-| `_run_one_iteration` — no camera | 2 | no read, no publish |
+| `_run_one_iteration` — camera read error | 5 | camera cleared, closed, error logged, no publish, no retry after error |
+| `_run_one_iteration` — no camera | 3 | no read, no publish, waits on `_camera_changed_event` |
 | `_run_one_iteration` — camera recreation | 6 | local/RTSP recreated, old closed, event cleared, `DeviceNotFoundError` handled |
 | `_run_one_iteration` — queue drop | 2 | oldest dropped, debug logged |
 | `_run_one_iteration` — FPS throttle | 4 | wait called with correct timeout, no wait when slow, `_last_frame_time` updated |
+| `_run_one_iteration` — lock behaviour | 2 | lock released before `detect()`, `detect()` not called while lock held |
+| `_run_one_iteration` — queue methods | 2 | `put_nowait`/`get_nowait` used, `put`/`get` never called |
 | Concurrency — `update_config` | 3 | no exception, final config valid, event set |
 | Concurrency — `stop()` | 2 | clean join, throttle wait interrupted |
