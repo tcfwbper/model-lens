@@ -294,12 +294,11 @@ from model_lens.exceptions import ConfigurationError
 
 | Test ID | Description | Input | Expected |
 |---|---|---|---|
-| `test_load_env_coercion_int_failure_raises` | Non-integer value for an `int` field raises `ConfigurationError` | `ML_SERVER_PORT="abc"` | `raises ConfigurationError('Environment variable ML_SERVER_PORT cannot be coerced to int, got "abc"')` |
-| `test_load_env_coercion_float_failure_raises` | Non-float value for a `float` field raises `ConfigurationError` | `ML_MODEL_CONFIDENCE_THRESHOLD="xyz"` | `raises ConfigurationError('Environment variable ML_MODEL_CONFIDENCE_THRESHOLD cannot be coerced to float, got "xyz"')` |
-| `test_load_env_coercion_bool_failure_raises` | Unrecognised value for a `bool` field raises `ConfigurationError` | `ML_SOME_BOOL_FIELD="maybe"` (use a bool field if one exists, otherwise document as N/A and skip) | `raises ConfigurationError` with message matching the pattern |
+| `test_load_env_coercion_int_failure_raises` | Non-integer value for an `int` field raises `ConfigurationError` | `ML_SERVER_PORT="abc"` | `raises ConfigurationError` with message containing `"ML_SERVER_PORT"`, `"int"`, and `"abc"` |
+| `test_load_env_coercion_float_failure_raises` | Non-float value for a `float` field raises `ConfigurationError` | `ML_MODEL_CONFIDENCE_THRESHOLD="xyz"` | `raises ConfigurationError` with message containing `"ML_MODEL_CONFIDENCE_THRESHOLD"`, `"float"`, and `"xyz"` |
 | `test_load_env_coercion_str_no_failure` | String env var is always accepted as-is | `ML_SERVER_HOST="any-string"` | does not raise; `AppConfig.server.host == "any-string"` |
 
-> **Note:** If no `bool`-typed config field exists in the current schema, `test_load_env_coercion_bool_failure_raises` should be marked `pytest.mark.skip` with reason `"No bool-typed config field in current schema"`.
+> **Note:** The current config schema contains no `bool`-typed fields, so coercion tests for bool types are not applicable.
 
 ---
 
@@ -337,5 +336,5 @@ from model_lens.exceptions import ConfigurationError
 | `validate()` | 24 | all field constraints, boundary values, exact error messages |
 | `load()` — file resolution | 10 | no file, cwd discovery, explicit `--config`, TOML parse error |
 | `load()` — TOML merging | 5 | partial override, unknown keys ignored, missing keys retain defaults |
-| `load()` — env var overrides | 11 | all 9 env vars, coercion for int/float/bool/str, debug logging |
+| `load()` — env var overrides | 10 | all 9 env vars, coercion for int/float/str, debug logging |
 | `load()` — package-data resolution | 7 | bundled path resolved, skipped when set, failure cases, debug logging |
