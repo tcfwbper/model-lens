@@ -281,10 +281,10 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 
 | Test ID | Description | Input | Expected |
 |---|---|---|---|
-| `test_run_one_iteration_throttle_waits_when_too_fast` | When elapsed time since last frame is less than `1/30` s, `_stop_event.wait` is called with a positive timeout | patch `time.monotonic` to return `_last_frame_time + 0.010` (10 ms elapsed, min is ~33.3 ms) | `_stop_event.wait` called with `timeout` approximately equal to `1/30 - 0.010` (within 1 ms tolerance) |
-| `test_run_one_iteration_throttle_timeout_is_remaining_interval` | The timeout passed to `_stop_event.wait` is the remaining interval, not the full interval | patch `time.monotonic` to return `_last_frame_time + 0.020` | `_stop_event.wait` called with `timeout` approximately `1/30 - 0.020` (within 1 ms tolerance) |
-| `test_run_one_iteration_no_throttle_when_slow_source` | When elapsed time exceeds `1/30` s, `_stop_event.wait` is NOT called for throttling | patch `time.monotonic` to return `_last_frame_time + 0.050` (50 ms elapsed) | `_stop_event.wait` not called (or called zero times for throttle purposes) |
-| `test_run_one_iteration_updates_last_frame_time_after_publish` | `_last_frame_time` is updated to the current monotonic time after a successful publish | patch `time.monotonic` to return a known value `T` at publish time | `pipeline._last_frame_time == T` after the iteration |
+| `test_run_one_iteration_throttle_waits_when_too_fast` | When interval is less than 1/30s, compute remaining time and trigger interruptible wait to cap output at 30 FPS | `elapsed = 10ms` | `_stop_event.wait` called with `timeout == pytest.approx(1/30 - 0.010, abs=5e-3)` |
+| `test_run_one_iteration_no_wait_when_already_slow` | When capture or processing already exceeds 1/30s, do not wait further (boundary condition) | `elapsed = 40ms` | `_stop_event.wait` not called (or called with timeout 0) |
+| `test_run_one_iteration_no_throttle_on_first_frame` | First iteration (no previous time record) does not trigger throttle wait | `_last_frame_time = 0` | `_stop_event.wait` not called |
+| `test_run_one_iteration_updates_last_frame_time_after_publish` | After successful publish, update `_last_frame_time` as the baseline for the next throttle check | patch `time.monotonic` | `pipeline._last_frame_time` updated to current monotonic time |
 
 ### 7.10 Lock Behaviour
 
@@ -306,14 +306,30 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 
 ---
 
-## 8. Concurrency — `update_config` Stress Test
+## 8. End-to-End — FPS Cap
+
+> **Note:** These tests start the real background thread via `pipeline.start()`. The mock
+> camera's `read()` returns frames immediately (no sleep) to simulate a source faster than
+> 30 FPS. The result queue is drained periodically by a consumer thread to prevent it from
+> filling up and blocking measurement. `pipeline.stop()` is always called in a `finally`
+> block.
+
+### 8.1 Actual Output Rate Does Not Exceed 30 FPS
+
+| Test ID | Description | Input | Expected |
+|---|---|---|---|
+| `test_fps_cap_output_rate_does_not_exceed_30` | When the source delivers frames faster than 30 FPS, the pipeline's actual output rate measured over a 1-second window does not exceed 30 FPS | mock camera `read()` returns instantly; run pipeline for 1 second; count `PipelineResult` objects published to the queue | total results published ≤ 32 (30 FPS × 1s plus 2-frame tolerance for timing imprecision) |
+
+---
+
+## 9. Concurrency — `update_config` Stress Test
 
 > **Note:** These tests start the real background thread via `pipeline.start()` and use
 > real `threading.Thread` objects to call `update_config()` concurrently. The pipeline's
 > `CameraCapture` is mocked so no hardware is accessed. `pipeline.stop()` is always called
 > in a `finally` block to ensure clean teardown.
 
-### 8.1 Simultaneous `update_config` Calls
+### 9.1 Simultaneous `update_config` Calls
 
 | Test ID | Description | Input | Expected |
 |---|---|---|---|
@@ -323,14 +339,14 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 
 ---
 
-## 9. Concurrency — `stop()` Interrupts Frame Loop
+## 10. Concurrency — `stop()` Interrupts Frame Loop
 
 > **Note:** These tests start the real background thread via `pipeline.start()`. The mock
 > camera's `read()` is configured to block briefly (using `time.sleep(0.05)`) to simulate
 > a slow source, giving the stop signal time to arrive mid-iteration. `pipeline.stop()` is
 > always called in a `finally` block.
 
-### 9.1 Clean Shutdown Under Load
+### 10.1 Clean Shutdown Under Load
 
 | Test ID | Description | Input | Expected |
 |---|---|---|---|
@@ -357,8 +373,9 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `_run_one_iteration` — no camera | 3 | no read, no publish, waits on `_camera_changed_event` |
 | `_run_one_iteration` — camera recreation | 6 | local/RTSP recreated, old closed, event cleared, `DeviceNotFoundError` handled |
 | `_run_one_iteration` — queue drop | 2 | oldest dropped, debug logged |
-| `_run_one_iteration` — FPS throttle | 4 | wait called with correct timeout, no wait when slow, `_last_frame_time` updated |
+| `_run_one_iteration` — FPS throttle | 4 | 30 FPS cap enforced, no wait when slow, no throttle on first frame, `_last_frame_time` updated |
 | `_run_one_iteration` — lock behaviour | 2 | lock released before `detect()`, `detect()` not called while lock held |
 | `_run_one_iteration` — queue methods | 2 | `put_nowait`/`get_nowait` used, `put`/`get` never called |
+| End-to-End — FPS cap | 1 | actual output rate ≤ 30 FPS over 1-second window |
 | Concurrency — `update_config` | 3 | no exception, final config valid, event set |
 | Concurrency — `stop()` | 2 | clean join, throttle wait interrupted |
