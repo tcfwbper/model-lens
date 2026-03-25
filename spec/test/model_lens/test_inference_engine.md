@@ -137,6 +137,13 @@ from model_lens.inference_engine import TorchInferenceEngine
 | `test_detect_results_ordered_by_descending_confidence` | Multiple detections are returned in descending confidence order | Mock returns three detections with confidences `0.6`, `0.9`, `0.75` (in that raw order) | `result[0].confidence == 0.9`, `result[1].confidence == 0.75`, `result[2].confidence == 0.6` |
 | `test_detect_equal_confidence_both_present` | Two detections with identical confidence are both present in the result (order not asserted) | Mock returns two detections both with confidence `0.8` | `len(result) == 2`; both confidences are `0.8` |
 
+### 4.4 Immutability — Input Parameters
+
+| Test ID | Description | Input | Expected |
+|---|---|---|---|
+| `test_detect_does_not_mutate_frame` | `detect()` does not modify the input frame array | Pass a `numpy.ndarray` frame; record a copy before the call; call `detect()`; compare after | `numpy.array_equal(frame_before, frame_after) is True` |
+| `test_detect_does_not_mutate_target_labels` | `detect()` does not modify the `target_labels` list | Pass a `list[str]` as `target_labels`; record a copy before the call; call `detect()`; compare after | `target_labels` equals its pre-call copy |
+
 ---
 
 ## 5. `TorchInferenceEngine.detect()` — Validation Failures
@@ -179,6 +186,7 @@ from model_lens.inference_engine import TorchInferenceEngine
 | `TorchInferenceEngine.__init__` (confidence_threshold) | 5 | zero, negative, above one, upper boundary, just above zero |
 | `TorchInferenceEngine.__init__` (package-data fallback) | 4 | empty model path success/failure, empty labels path success/failure |
 | `TorchInferenceEngine.detect()` (happy path) | 5 | return type, empty result, field correctness, is_target true/false |
+| `TorchInferenceEngine.detect()` (immutability) | 2 | frame not mutated, target_labels not mutated |
 | `TorchInferenceEngine.detect()` (threshold filtering) | 3 | below, at, above threshold |
 | `TorchInferenceEngine.detect()` (ordering) | 2 | descending order, equal confidence both present |
 | `TorchInferenceEngine.detect()` (failures) | 2 | unknown index → ParseError, runtime failure → OperationError |
