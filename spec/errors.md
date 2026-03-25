@@ -9,18 +9,9 @@ All public functions communicate failure through typed exceptions — never via 
 
 ## Exception Hierarchy
 
-Define project exceptions in `src/model_lens/exceptions.py`:
+Define project exceptions in `src/model_lens/exceptions.py`.
 
-```
-ModelLensError               ← base for all project exceptions
-├── ConfigurationError     ← invalid or missing configuration
-├── HardwareError          ← failures interacting with hardware (e.g., GPU)
-│   └── DeviceNotFoundError
-├── DataError              ← unexpected or malformed data
-│   ├── ValidationError    ← input fails validation rules
-│   └── ParseError         ← data cannot be parsed/decoded
-└── OperationError         ← a valid operation failed at runtime
-```
+For the complete definition of the exception hierarchy, base classes, and individual exception types, see [Exceptions Specification](logic/model_lens/exceptions.md).
 
 **Rules:**
 - All project-specific exceptions derive from `ModelLensError`.
