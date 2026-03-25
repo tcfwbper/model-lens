@@ -48,7 +48,7 @@ Bootstraps the application and owns the lifecycle of the Detection Pipeline. Ser
 Accepts runtime configuration changes (camera source, target labels). State is held **in memory only**; there is no persistence between restarts. Changes take effect on the next frame loop iteration without restarting the server.
 
 ### Stream API
-Pushes a continuous stream of annotated frames and detection results to the browser over SSE. Also provides a single-frame snapshot for debugging.
+Pushes a continuous stream of annotated frames and detection results to the browser over SSE.
 
 ### Detection Pipeline
 Runs the frame loop in a background task: reads frames from CameraCapture, passes them to InferenceEngine, and publishes annotated results to the in-memory queue consumed by Stream API. Reacts to config changes between frames without restarting.

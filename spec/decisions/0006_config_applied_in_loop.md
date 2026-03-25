@@ -18,7 +18,7 @@ Reading config in-loop is simpler: no signalling mechanism, no race conditions a
 ## Consequences
 - Config changes take effect within one frame interval (typically <100 ms).
 - The pipeline code has no explicit config-change handling logic; it simply reads the current slot on each iteration.
-- The shared config slot must be written atomically to avoid torn reads.
+- The shared config slot must be written atomically to avoid torn reads. The Detection Pipeline holds a reference to the current `RuntimeConfig` instance and exposes a thread-safe setter (protected by a `threading.Lock`). When the Config API updates settings, it acquires the lock, constructs a new `RuntimeConfig` instance, and swaps the reference. Concurrent reads in the detection loop may snapshot a stale or new config; both are correct because any value read is atomically consistent at the moment of access.
 
 ## Superseded By / Supersedes
 N/A

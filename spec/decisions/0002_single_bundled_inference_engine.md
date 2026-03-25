@@ -20,6 +20,7 @@ MVP scope is a local demo tool; runtime model swapping adds complexity without d
 - Simpler startup and no runtime model management.
 - Model and confidence threshold can only be changed via environment variables before starting the server.
 - Adding a second backend in future requires introducing a registry in the InferenceEngine layer without touching the pipeline or API.
+- The abstract `InferenceEngine` base class defines an `ENGINE_REGISTRY` dict mapping backend name strings to concrete subclass types. Adding a new backend (e.g., ONNX, TFLite) requires: (1) implementing a new subclass, (2) importing it at startup, (3) adding one entry to `ENGINE_REGISTRY`. No changes to the Detection Pipeline or other components are required.
 
 ## Superseded By / Supersedes
 N/A
