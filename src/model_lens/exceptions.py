@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """Project-specific exception hierarchy for ModelLens.
 
 All exceptions derive from :class:`ModelLensError`, which itself inherits from
@@ -30,7 +29,7 @@ class ModelLensError(Exception):
         TypeError: If called with zero or more than one positional argument.
     """
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str) -> None:  # pylint: disable=useless-super-delegation
         """Initialise the exception with a single message string.
 
         Args:
