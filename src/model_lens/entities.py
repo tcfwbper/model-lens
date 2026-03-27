@@ -23,6 +23,7 @@ import abc
 from dataclasses import dataclass, field
 
 import numpy as np
+from numpy.typing import NDArray
 
 from model_lens.exceptions import ValidationError
 
@@ -64,9 +65,7 @@ class LocalCameraConfig(CameraConfig):
             ValidationError: If ``device_index`` is negative.
         """
         if self.device_index < 0:
-            raise ValidationError(
-                f"LocalCameraConfig.device_index must be >= 0, got {self.device_index!r}"
-            )
+            raise ValidationError(f"LocalCameraConfig.device_index must be >= 0, got {self.device_index!r}")
 
 
 @dataclass(frozen=True)
@@ -135,7 +134,7 @@ class DetectionResult:
         """
         if not self.label:
             raise ValidationError("DetectionResult.label must be a non-empty string")
-        if not (0.0 < self.confidence <= 1.0):
+        if not 0.0 < self.confidence <= 1.0:
             raise ValidationError(
                 f"DetectionResult.confidence must satisfy 0.0 < value <= 1.0, got {self.confidence!r}"
             )
@@ -155,6 +154,6 @@ class Frame:
         source: Human-readable camera source identifier (e.g., ``"local:0"`` or an RTSP URL).
     """
 
-    data: np.ndarray
+    data: NDArray[np.uint8]
     timestamp: float
     source: str
