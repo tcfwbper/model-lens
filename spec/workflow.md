@@ -56,11 +56,12 @@ Design specifications are the source of truth. Implementation must always align 
    - Use assertions to validate expected behavior
    - All tests must reference test cases in `spec/test/<module_name>.md`
 
-3. **Run tests to verify they fail:**
+3. **Run unit tests to verify they fail:**
    ```bash
    dev/test.sh
    ```
-   - All new tests should initially FAIL (red) — this is expected
+   - Runs only tests marked `unit` by default
+   - All new unit tests should initially FAIL (red) — this is expected
 
 ---
 
@@ -81,12 +82,13 @@ Design specifications are the source of truth. Implementation must always align 
    - Every module must have a docstring
    - Every function/method must be typed and documented
 
-3. **Run all tests:**
+3. **Run unit tests:**
    ```bash
    dev/test.sh
    ```
-   - All tests must PASS (green)
-   - No test failures or errors allowed before commit
+   - All unit tests must PASS (green)
+   - No unit test failures or errors allowed before commit
+   - E2E and race tests are run in CI only (`dev/test.sh --all`)
 
 ---
 
@@ -101,12 +103,13 @@ Before committing any code:
    - Runs black, isort, and docformatter
    - Fix any violations before committing
 
-2. **All Tests Pass:**
+2. **Unit Tests Pass:**
    ```bash
    dev/test.sh
    ```
-   - Zero test failures
-   - 100% of new functionality must have test coverage
+   - Zero unit test failures
+   - 100% of new functionality must have unit test coverage
+   - E2E and race tests are not required locally; they run in CI via `dev/test.sh --all`
 
 3. **Spec is Updated:**
    - All specs in `spec/` match the implementation
@@ -122,16 +125,16 @@ Before committing any code:
 - [ ] **Tests:** Is there a `spec/test/model_lens/<module_name>.md`?
   - [ ] If no: Create test spec with input → output cases
   - [ ] Write `test/model_lens/test_<module_name>.py` before implementation
-  - [ ] Run `dev/test.sh` — tests should initially FAIL
+  - [ ] Run `dev/test.sh` — unit tests should initially FAIL
 - [ ] **Code:** Implement minimal functionality
   - [ ] Add code to `src/model_lens/<module_name>.py`
   - [ ] Follow `spec/conventions.md` strictly
   - [ ] Add docstrings (Google style, 120 char max)
   - [ ] Run `dev/format.sh` — ensure black/isort/docformatter pass
-  - [ ] Run `dev/test.sh` — all tests must PASS
+  - [ ] Run `dev/test.sh` — all unit tests must PASS
 - [ ] **Review:** Are all quality gates met?
   - [ ] Code is formatted correctly
-  - [ ] All tests pass
+  - [ ] All unit tests pass (E2E and race tests verified in CI)
   - [ ] Specs are up-to-date and consistent
   - [ ] No ad-hoc or debug code remains
 
@@ -141,9 +144,11 @@ Before committing any code:
 
 | Command | Purpose |
 |---------|---------|
-| `dev/test.sh` | Run all tests; verify they pass before commit |
+| `dev/test.sh` | Run unit tests only (default); verify they pass before commit |
+| `dev/test.sh --all` | Run full test suite including E2E and race tests (CI only) |
 | `dev/format.sh` | Format code (black, isort, docformatter) |
-| `dev/format-and-test.sh` | Format then run all tests |
+| `dev/format-and-test.sh` | Format then run unit tests |
+| `dev/format-and-test.sh --all` | Format then run full test suite including E2E and race tests (CI only) |
 | `dev/venv-create.sh` | Create Python virtual environment |
 | `dev/venv-reset.sh` | Reset virtual environment to clean state |
 | `dev/bootstrap.sh` | Full project setup (venv + install deps) |
