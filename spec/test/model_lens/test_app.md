@@ -539,7 +539,7 @@ def client_with_broken_pipeline(mock_pipeline, tmp_path):
 |---|---|---|---|---|---|
 | `GET /healthz` | 2 | 2 | 0 | 0 | 200 status, empty body |
 | `GET /config` | 10 | 10 | 0 | 0 | local/RTSP shape, field presence/absence, labels, confidence |
-| `PUT /config/camera` | 14 | 14 | 0 | 0 | local/RTSP update, `update_config` called, field preservation, validation failures, ignored fields |
+| `PUT /config/camera` | 17 | 17 | 0 | 0 | local/RTSP update, `update_config` called, field preservation, validation failures, ignored fields |
 | `PUT /config/labels` | 11 | 11 | 0 | 0 | labels update, `update_config` called, field preservation, validation failures |
 | `GET /stream` | 21 | 21 | 0 | 0 | event format, base64, keepalive, idle timeout (keepalive does not reset timer), disconnect |
 | Static assets | 9 | 9 | 0 | 0 | `index.html` body, ETag MD5, quoted ETag, static files, 404 |
