@@ -14,6 +14,14 @@
 
 """Re-export shared fixtures so pytest discovers them from the fixtures package."""
 
+from fixtures.app import (  # noqa: F401  (re-exported for pytest fixture discovery)
+    client,
+    client_with_broken_pipeline,
+    lifespan_mocks,
+    make_pipeline_result,
+    mock_pipeline,
+    static_client,
+)
 from fixtures.entities import (  # noqa: F401  (re-exported for pytest fixture discovery)
     default_runtime_config,
     local_camera_config,
