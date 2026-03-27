@@ -2,6 +2,21 @@
 set -e
 cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"/../
 
+RUN_ALL=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --all)
+            RUN_ALL=true
+            ;;
+        *)
+            echo "Unknown argument: $arg" >&2
+            echo "Usage: $0 [--all]" >&2
+            exit 1
+            ;;
+    esac
+done
+
 echo "=== test.sh ==="
 
 echo "- Start Python checks"
@@ -35,7 +50,11 @@ python -m flake8 src/model_lens
 echo "- flake8: done"
 
 echo "- pytest: start"
-python -m pytest --cov=src/model_lens --disable-warnings
+if [[ "$RUN_ALL" == true ]]; then
+    python -m pytest --cov=src/model_lens --disable-warnings
+else
+    python -m pytest --cov=src/model_lens --disable-warnings -m "unit"
+fi
 echo "- pytest: done"
 
 echo "- All Python checks passed"
