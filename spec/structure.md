@@ -30,6 +30,7 @@ This document defines the canonical directory layout and naming conventions for 
 - Each module must have a corresponding spec in `spec/logic/model_lens`.
 
 ### `test/model_lens`
-- Mirrors the structure of `src/model_lens/`.
+- Each production module in `src/model_lens/` must have a corresponding `test_<module_name>.py` file here.
 - Test file naming: `test_<module_name>.py`
-- Each test file must map to a spec in `spec/test/model_lens`.
+- Each `test_*.py` file must map to a spec in `spec/test/model_lens`.
+- Additional test-support files (e.g. `conftest.py`, fixture modules, shared helpers) are permitted and do not require a corresponding spec or production module.
