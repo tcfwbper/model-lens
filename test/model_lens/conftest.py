@@ -14,7 +14,7 @@
 
 """Re-export shared fixtures so pytest discovers them from the fixtures package."""
 
-from test.fixtures.entities import (  # noqa: F401  (re-exported for pytest fixture discovery)
+from fixtures.entities import (  # noqa: F401  (re-exported for pytest fixture discovery)
     default_runtime_config,
     local_camera_config,
     valid_detection_result,
