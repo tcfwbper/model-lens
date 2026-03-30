@@ -11,10 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Tests for src/model_lens/inference_engine.py."""
 
-"""Tests for model_lens.inference_engine.TorchInferenceEngine."""
+from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,7 +22,8 @@ import numpy as np
 import pytest
 
 from model_lens.exceptions import ConfigurationError, OperationError, ParseError
-from model_lens.inference_engine import TorchInferenceEngine
+from model_lens.inference_engine import TorchInferenceEngine, _resolve_package_resource
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -34,12 +35,7 @@ def _make_raw_detection(
     confidence: float,
     box: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0),
 ) -> dict:
-    """Return a raw detection dict in the format the engine expects."""
-    return {
-        "index": index,
-        "confidence": confidence,
-        "box": box,
-    }
+    return {"index": index, "confidence": confidence, "box": list(box)}
 
 
 # ===========================================================================
@@ -51,16 +47,15 @@ class TestLabelMapHappyPath:
     """1.1 Happy Path — Construction (label map)."""
 
     def _make_engine(self, tmp_path: Path, label_content: str) -> TorchInferenceEngine:
-        labels = tmp_path / "labels.txt"
-        labels.write_text(label_content)
-        model_file = tmp_path / "model.pt"
-        model_file.write_bytes(b"")
-        os.chdir(tmp_path)
+        labels_file = tmp_path / "labels.txt"
+        labels_file.write_text(label_content, encoding="utf-8")
+        dummy_model = tmp_path / "model.pt"
+        dummy_model.write_bytes(b"")
         with patch("model_lens.inference_engine.torch.load", return_value=MagicMock()):
             return TorchInferenceEngine(
-                model_path=str(model_file),
-                labels_path=str(labels),
+                model_path=str(dummy_model),
                 confidence_threshold=0.5,
+                labels_path=str(labels_file),
             )
 
     @pytest.mark.unit
@@ -116,36 +111,117 @@ class TestLabelMapValidationFailures:
             with pytest.raises(ConfigurationError):
                 TorchInferenceEngine(
                     model_path=str(model_file),
-                    labels_path="/nonexistent/labels.txt",
                     confidence_threshold=0.5,
+                    labels_path="/nonexistent/labels.txt",
                 )
 
     @pytest.mark.unit
     def test_label_map_empty_file(self, tmp_path: Path) -> None:
         """A completely empty file (zero bytes) raises ParseError."""
-        labels = tmp_path / "labels.txt"
-        labels.write_text("")
         model_file = self._make_model_file(tmp_path)
+        labels_file = tmp_path / "labels.txt"
+        labels_file.write_text("", encoding="utf-8")
         with patch("model_lens.inference_engine.torch.load", return_value=MagicMock()):
             with pytest.raises(ParseError):
                 TorchInferenceEngine(
                     model_path=str(model_file),
-                    labels_path=str(labels),
                     confidence_threshold=0.5,
+                    labels_path=str(labels_file),
                 )
 
     @pytest.mark.unit
     def test_label_map_only_blank_lines(self, tmp_path: Path) -> None:
         """A file containing only blank lines raises ParseError."""
-        labels = tmp_path / "labels.txt"
-        labels.write_text("\n\n\n")
         model_file = self._make_model_file(tmp_path)
+        labels_file = tmp_path / "labels.txt"
+        labels_file.write_text("\n\n\n", encoding="utf-8")
         with patch("model_lens.inference_engine.torch.load", return_value=MagicMock()):
             with pytest.raises(ParseError):
                 TorchInferenceEngine(
                     model_path=str(model_file),
-                    labels_path=str(labels),
                     confidence_threshold=0.5,
+                    labels_path=str(labels_file),
+                )
+
+
+class TestLabelMapLoadingValidationFailures:
+    """1.3 Validation Failures — Label Map Loading.
+
+    Exercises branches inside ``InferenceEngine._load_label_map`` that are not
+    reachable through the normal ``TorchInferenceEngine`` constructor path:
+
+    * The ``not path.exists()`` branch when called directly.
+    * The ``OSError`` branch triggered when the file exists but cannot be read.
+    """
+
+    @pytest.mark.unit
+    def test_inference_engine_label_map_file_not_found_raises_configuration_error(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Raises ConfigurationError when the label map file does not exist."""
+        from model_lens.inference_engine import InferenceEngine
+
+        missing_path = str(tmp_path / "nonexistent_labels.txt")
+        with pytest.raises(ConfigurationError):
+            InferenceEngine._load_label_map(missing_path)
+
+    @pytest.mark.unit
+    def test_inference_engine_label_map_file_unreadable_raises_configuration_error(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Raises ConfigurationError when the label map file exists but cannot be read."""
+        from model_lens.inference_engine import InferenceEngine
+
+        labels_file = tmp_path / "labels.txt"
+        labels_file.write_text("person\n", encoding="utf-8")
+
+        with patch.object(Path, "read_text", side_effect=OSError("permission denied")):
+            with pytest.raises(ConfigurationError):
+                InferenceEngine._load_label_map(str(labels_file))
+
+
+class TestPackageDataResourceResolution:
+    """1.4 Error Propagation — Package-Data Fallback.
+
+    Exercises the ``except Exception`` block inside ``_resolve_package_resource``
+    that wraps any resolution failure as ``FileNotFoundError``, and verifies that
+    ``TorchInferenceEngine._resolve_path`` surfaces this as ``ConfigurationError``.
+    """
+
+    @pytest.mark.unit
+    def test_resolve_package_resource_wraps_exception_as_file_not_found_error(self) -> None:
+        """_resolve_package_resource wraps any internal exception as FileNotFoundError."""
+        with patch(
+            "importlib.resources.files",
+            side_effect=Exception("unexpected internal error"),
+        ):
+            with pytest.raises(FileNotFoundError):
+                _resolve_package_resource("model.pt")
+
+    @pytest.mark.unit
+    def test_torch_inference_engine_package_data_unresolvable_raises_configuration_error(
+        self,
+        tmp_path: Path,
+        label_map_file: Path,
+    ) -> None:
+        """Raises ConfigurationError when the package-data resource cannot be located.
+
+        Patches ``importlib.resources.files`` to raise an arbitrary exception,
+        simulating a broken or missing package-data installation, and confirms
+        that ``TorchInferenceEngine`` surfaces this as ``ConfigurationError``
+        rather than leaking the internal ``FileNotFoundError``.
+        """
+        with patch(
+            "importlib.resources.files",
+            side_effect=Exception("package data unavailable"),
+        ):
+            with pytest.raises(ConfigurationError):
+                TorchInferenceEngine(
+                    model_path="",  # triggers package-data resolution for model_path
+                    confidence_threshold=0.5,
+                    labels_path=str(label_map_file),
                 )
 
 
@@ -165,8 +241,8 @@ class TestModelLoadingHappyPath:
         with patch("model_lens.inference_engine.torch.load", return_value=MagicMock()):
             engine = TorchInferenceEngine(
                 model_path=str(model_file),
-                labels_path=str(label_map_file),
                 confidence_threshold=0.5,
+                labels_path=str(label_map_file),
             )
         assert engine is not None
 
@@ -180,8 +256,8 @@ class TestModelLoadingValidationFailures:
         with pytest.raises(ConfigurationError):
             TorchInferenceEngine(
                 model_path="/nonexistent/model.pt",
-                labels_path=str(label_map_file),
                 confidence_threshold=0.5,
+                labels_path=str(label_map_file),
             )
 
     @pytest.mark.unit
@@ -193,8 +269,8 @@ class TestModelLoadingValidationFailures:
             with pytest.raises(OperationError):
                 TorchInferenceEngine(
                     model_path=str(model_file),
-                    labels_path=str(label_map_file),
                     confidence_threshold=0.5,
+                    labels_path=str(label_map_file),
                 )
 
     @pytest.mark.unit
@@ -206,8 +282,8 @@ class TestModelLoadingValidationFailures:
             with pytest.raises(ConfigurationError):
                 TorchInferenceEngine(
                     model_path=str(model_file),
-                    labels_path=str(label_map_file),
                     confidence_threshold=0.0,
+                    labels_path=str(label_map_file),
                 )
 
     @pytest.mark.unit
@@ -219,8 +295,8 @@ class TestModelLoadingValidationFailures:
             with pytest.raises(ConfigurationError):
                 TorchInferenceEngine(
                     model_path=str(model_file),
-                    labels_path=str(label_map_file),
                     confidence_threshold=-0.1,
+                    labels_path=str(label_map_file),
                 )
 
     @pytest.mark.unit
@@ -232,8 +308,8 @@ class TestModelLoadingValidationFailures:
             with pytest.raises(ConfigurationError):
                 TorchInferenceEngine(
                     model_path=str(model_file),
-                    labels_path=str(label_map_file),
                     confidence_threshold=1.001,
+                    labels_path=str(label_map_file),
                 )
 
     @pytest.mark.unit
@@ -244,8 +320,8 @@ class TestModelLoadingValidationFailures:
         with patch("model_lens.inference_engine.torch.load", return_value=MagicMock()):
             engine = TorchInferenceEngine(
                 model_path=str(model_file),
-                labels_path=str(label_map_file),
                 confidence_threshold=1.0,
+                labels_path=str(label_map_file),
             )
         assert engine is not None
 
@@ -257,8 +333,8 @@ class TestModelLoadingValidationFailures:
         with patch("model_lens.inference_engine.torch.load", return_value=MagicMock()):
             engine = TorchInferenceEngine(
                 model_path=str(model_file),
-                labels_path=str(label_map_file),
                 confidence_threshold=1e-9,
+                labels_path=str(label_map_file),
             )
         assert engine is not None
 
@@ -274,17 +350,19 @@ class TestPackageDataFallback:
     @pytest.mark.unit
     def test_empty_model_path_uses_package_data(self, tmp_path: Path, label_map_file: Path) -> None:
         """model_path='' triggers package-data resolution; succeeds when resource is found."""
+        dummy_model = tmp_path / "model.pt"
+        dummy_model.write_bytes(b"")
         with (
             patch(
                 "model_lens.inference_engine._resolve_package_resource",
-                side_effect=lambda name: str(tmp_path / name),
+                return_value=str(dummy_model),
             ),
             patch("model_lens.inference_engine.torch.load", return_value=MagicMock()),
         ):
             engine = TorchInferenceEngine(
                 model_path="",
-                labels_path=str(label_map_file),
                 confidence_threshold=0.5,
+                labels_path=str(label_map_file),
             )
         assert engine is not None
 
@@ -292,18 +370,18 @@ class TestPackageDataFallback:
     def test_empty_labels_path_uses_package_data(self, tmp_path: Path, dummy_model_file: Path) -> None:
         """labels_path='' triggers package-data resolution; succeeds when resource is found."""
         labels = tmp_path / "pkg_labels.txt"
-        labels.write_text("person\nbicycle\ncar\n")
+        labels.write_text("person\nbicycle\ncar\n", encoding="utf-8")
         with (
             patch(
                 "model_lens.inference_engine._resolve_package_resource",
-                side_effect=lambda name: str(labels),
+                return_value=str(labels),
             ),
             patch("model_lens.inference_engine.torch.load", return_value=MagicMock()),
         ):
             engine = TorchInferenceEngine(
                 model_path=str(dummy_model_file),
-                labels_path="",
                 confidence_threshold=0.5,
+                labels_path="",
             )
         assert engine is not None
 
@@ -317,8 +395,8 @@ class TestPackageDataFallback:
             with pytest.raises(ConfigurationError):
                 TorchInferenceEngine(
                     model_path="",
-                    labels_path=str(label_map_file),
                     confidence_threshold=0.5,
+                    labels_path=str(label_map_file),
                 )
 
     @pytest.mark.unit
@@ -331,8 +409,8 @@ class TestPackageDataFallback:
             with pytest.raises(ConfigurationError):
                 TorchInferenceEngine(
                     model_path=str(dummy_model_file),
-                    labels_path="",
                     confidence_threshold=0.5,
+                    labels_path="",
                 )
 
 
