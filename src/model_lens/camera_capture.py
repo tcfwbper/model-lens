@@ -26,10 +26,13 @@ import logging
 import random
 import threading
 import time
+from collections.abc import Callable
 from types import TracebackType
+from typing import cast
 
 import cv2
 import numpy as np
+from numpy.typing import NDArray
 
 from model_lens.entities import Frame, LocalCameraConfig, RtspCameraConfig
 from model_lens.exceptions import DeviceNotFoundError, OperationError, ValidationError
@@ -75,7 +78,7 @@ class CameraCapture(abc.ABC):
         Idempotent: calling this method more than once is safe.
         """
 
-    def __enter__(self) -> "CameraCapture":
+    def __enter__(self) -> CameraCapture:
         """Enter the context manager, returning ``self``.
 
         Returns:
@@ -100,8 +103,8 @@ class CameraCapture(abc.ABC):
 
 
 def _retry_read(
-    open_cap: "cv2.VideoCapture",
-    reopen_fn: "callable[[], cv2.VideoCapture]",
+    open_cap: cv2.VideoCapture,
+    reopen_fn: Callable[[], cv2.VideoCapture],
     source: str,
     lock: threading.Lock,
 ) -> Frame:
@@ -118,7 +121,7 @@ def _retry_read(
             ``cv2.VideoCapture`` handle.
         source: The human-readable source identifier stored on the returned
             :class:`~model_lens.entities.Frame`.
-        lock: The per-instance lock, already held by the caller.
+        lock: The per-instance lock, passed by the caller.
 
     Returns:
         A :class:`~model_lens.entities.Frame` on success.
@@ -128,14 +131,16 @@ def _retry_read(
     """
     cap = open_cap
     for attempt in range(_MAX_ATTEMPTS):
-        success, raw = cap.read()
+        with lock:
+            success, raw = cap.read()
         if success and raw is not None:
             timestamp = time.time()
-            data: np.ndarray = raw.copy()
+            data: NDArray[np.uint8] = cast(NDArray[np.uint8], raw.copy())
             return Frame(data=data, timestamp=timestamp, source=source)
 
         # This attempt failed — release the handle.
-        cap.release()
+        with lock:
+            cap.release()
         logger.warning("Frame read failed on attempt %d for source %r", attempt + 1, source)
 
         # Determine the wait duration (base + jitter).
@@ -147,7 +152,8 @@ def _retry_read(
 
         if attempt + 1 < _MAX_ATTEMPTS:
             # Open a fresh handle for the next attempt.
-            cap = reopen_fn()
+            with lock:
+                cap = reopen_fn()
 
     logger.error("All %d read attempts exhausted for source %r", _MAX_ATTEMPTS, source)
     raise OperationError(f"Failed to read a frame from {source!r} after {_MAX_ATTEMPTS} attempts")
@@ -178,20 +184,20 @@ class LocalCamera(CameraCapture):
         self._device_index: int = config.device_index
         self.source: str = f"local:{config.device_index}"
         self._lock: threading.Lock = threading.Lock()
+        self._is_closed: bool = False
         self._cap: cv2.VideoCapture = cv2.VideoCapture(config.device_index)
         if not self._cap.isOpened():
-            raise DeviceNotFoundError(
-                f"LocalCamera: cannot open device index {config.device_index!r}"
-            )
+            raise DeviceNotFoundError(f"LocalCamera: cannot open device index {config.device_index!r}")
         logger.info("LocalCamera opened device index %d", config.device_index)
 
-    def _reopen(self) -> "cv2.VideoCapture":
+    def _reopen(self) -> cv2.VideoCapture:
         """Open a fresh ``cv2.VideoCapture`` handle for the configured device index.
 
         Returns:
             A new ``cv2.VideoCapture`` instance.
         """
-        return cv2.VideoCapture(self._device_index)
+        self._cap = cv2.VideoCapture(self._device_index)
+        return self._cap
 
     def read(self) -> Frame:
         """Acquire and return the next frame from the local camera.
@@ -203,13 +209,12 @@ class LocalCamera(CameraCapture):
         Raises:
             OperationError: If all retry attempts are exhausted.
         """
-        with self._lock:
-            return _retry_read(
-                open_cap=self._cap,
-                reopen_fn=self._reopen,
-                source=self.source,
-                lock=self._lock,
-            )
+        return _retry_read(
+            open_cap=self._cap,
+            reopen_fn=self._reopen,
+            source=self.source,
+            lock=self._lock,
+        )
 
     def close(self) -> None:
         """Release the ``cv2.VideoCapture`` handle.
@@ -217,9 +222,11 @@ class LocalCamera(CameraCapture):
         Idempotent: safe to call multiple times.
         """
         with self._lock:
-            if self._cap.isOpened():
-                self._cap.release()
-                logger.info("LocalCamera released device index %d", self._device_index)
+            if not getattr(self, "_is_closed", False):
+                if hasattr(self, "_cap") and self._cap.isOpened():
+                    self._cap.release()
+                    logger.info("LocalCamera released device index %d", self._device_index)
+                self._is_closed = True
 
 
 class RtspCamera(CameraCapture):
@@ -247,26 +254,24 @@ class RtspCamera(CameraCapture):
             DeviceNotFoundError: If ``cv2.VideoCapture`` cannot open the RTSP URL.
         """
         if not config.rtsp_url.startswith("rtsp://"):
-            raise ValidationError(
-                f"RtspCamera: rtsp_url must start with 'rtsp://', got {config.rtsp_url!r}"
-            )
+            raise ValidationError(f"RtspCamera: rtsp_url must start with 'rtsp://', got {config.rtsp_url!r}")
         self._rtsp_url: str = config.rtsp_url
         self.source: str = config.rtsp_url
         self._lock: threading.Lock = threading.Lock()
+        self._is_closed: bool = False
         self._cap: cv2.VideoCapture = cv2.VideoCapture(config.rtsp_url)
         if not self._cap.isOpened():
-            raise DeviceNotFoundError(
-                f"RtspCamera: cannot open RTSP URL {config.rtsp_url!r}"
-            )
+            raise DeviceNotFoundError(f"RtspCamera: cannot open RTSP URL {config.rtsp_url!r}")
         logger.info("RtspCamera opened URL %r", config.rtsp_url)
 
-    def _reopen(self) -> "cv2.VideoCapture":
+    def _reopen(self) -> cv2.VideoCapture:
         """Open a fresh ``cv2.VideoCapture`` handle for the configured RTSP URL.
 
         Returns:
             A new ``cv2.VideoCapture`` instance.
         """
-        return cv2.VideoCapture(self._rtsp_url)
+        self._cap = cv2.VideoCapture(self._rtsp_url)
+        return self._cap
 
     def read(self) -> Frame:
         """Acquire and return the next frame from the RTSP stream.
@@ -278,13 +283,12 @@ class RtspCamera(CameraCapture):
         Raises:
             OperationError: If all retry attempts are exhausted.
         """
-        with self._lock:
-            return _retry_read(
-                open_cap=self._cap,
-                reopen_fn=self._reopen,
-                source=self.source,
-                lock=self._lock,
-            )
+        return _retry_read(
+            open_cap=self._cap,
+            reopen_fn=self._reopen,
+            source=self.source,
+            lock=self._lock,
+        )
 
     def close(self) -> None:
         """Release the ``cv2.VideoCapture`` handle.
@@ -292,6 +296,8 @@ class RtspCamera(CameraCapture):
         Idempotent: safe to call multiple times.
         """
         with self._lock:
-            if self._cap.isOpened():
-                self._cap.release()
-                logger.info("RtspCamera released URL %r", self._rtsp_url)
+            if not getattr(self, "_is_closed", False):
+                if hasattr(self, "_cap") and self._cap.isOpened():
+                    self._cap.release()
+                    logger.info("RtspCamera released URL %r", self._rtsp_url)
+                self._is_closed = True
