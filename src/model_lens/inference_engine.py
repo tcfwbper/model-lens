@@ -28,13 +28,11 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
+from torch import nn
 
 from model_lens.entities import DetectionResult
-from model_lens.exceptions import (
-    ConfigurationError,
-    OperationError,
-    ParseError,
-)
+from model_lens.exceptions import ConfigurationError, OperationError, ParseError
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +63,7 @@ def _resolve_package_resource(filename: str) -> str:
         resolved = str(ref)
         return resolved
     except Exception as exc:
-        raise FileNotFoundError(
-            f"Package-data resource {filename!r} could not be resolved: {exc}"
-        ) from exc
+        raise FileNotFoundError(f"Package-data resource {filename!r} could not be resolved: {exc}") from exc
 
 
 class InferenceEngine(abc.ABC):
@@ -142,7 +138,7 @@ class InferenceEngine(abc.ABC):
     @abc.abstractmethod
     def detect(
         self,
-        frame: np.ndarray,
+        frame: NDArray[np.uint8],
         target_labels: list[str],
     ) -> list[DetectionResult]:
         """Run inference on a single BGR frame and return filtered detections.
@@ -267,20 +263,20 @@ class TorchInferenceEngine(InferenceEngine):
             ) from exc
 
     @staticmethod
-    def _load_model(model_path: str) -> object:
+    def _load_model(model_path: str) -> nn.Module:
         """Load a PyTorch model from ``model_path``.
 
         Args:
             model_path: Absolute path to the ``.pt`` model file.
 
         Returns:
-            The loaded PyTorch model object.
+            The loaded PyTorch model.
 
         Raises:
             OperationError: If PyTorch raises any exception while loading.
         """
         try:
-            model = torch.load(model_path, map_location="cpu")  # type: ignore[attr-defined]
+            model: nn.Module = torch.load(model_path, map_location="cpu")
             logger.info("Model loaded successfully from %r", model_path)
             return model
         except Exception as exc:
@@ -288,7 +284,7 @@ class TorchInferenceEngine(InferenceEngine):
 
     def detect(
         self,
-        frame: np.ndarray,
+        frame: NDArray[np.uint8],
         target_labels: list[str],
     ) -> list[DetectionResult]:
         """Run inference on a single BGR frame and return filtered detections.
@@ -334,9 +330,7 @@ class TorchInferenceEngine(InferenceEngine):
                     continue
 
                 if index not in self._label_map:
-                    raise ParseError(
-                        f"Raw model output index {index!r} has no entry in the label map"
-                    )
+                    raise ParseError(f"Raw model output index {index!r} has no entry in the label map")
 
                 label = self._label_map[index]
                 is_target = label in target_labels
