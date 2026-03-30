@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 
 from model_lens.exceptions import ConfigurationError, OperationError, ParseError
-from model_lens.inference_engine import TorchInferenceEngine, _resolve_package_resource
+from model_lens.inference_engine import TorchInferenceEngine
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ class TestLabelMapHappyPath:
 
 
 class TestLabelMapValidationFailures:
-    """1.2 Validation Failures — labels_path."""
+    """1.2 and 1.3 Validation Failures — labels_path / Label Map Loading."""
 
     def _make_model_file(self, tmp_path: Path) -> Path:
         model_file = tmp_path / "model.pt"
@@ -143,86 +143,62 @@ class TestLabelMapValidationFailures:
                     labels_path=str(labels_file),
                 )
 
-
-class TestLabelMapLoadingValidationFailures:
-    """1.3 Validation Failures — Label Map Loading.
-
-    Exercises branches inside ``InferenceEngine._load_label_map`` that are not
-    reachable through the normal ``TorchInferenceEngine`` constructor path:
-
-    * The ``not path.exists()`` branch when called directly.
-    * The ``OSError`` branch triggered when the file exists but cannot be read.
-    """
-
     @pytest.mark.unit
-    def test_inference_engine_label_map_file_not_found_raises_configuration_error(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        """Raises ConfigurationError when the label map file does not exist."""
-        from model_lens.inference_engine import InferenceEngine
-
-        missing_path = str(tmp_path / "nonexistent_labels.txt")
-        with pytest.raises(ConfigurationError):
-            InferenceEngine._load_label_map(missing_path)
-
-    @pytest.mark.unit
-    def test_inference_engine_label_map_file_unreadable_raises_configuration_error(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        """Raises ConfigurationError when the label map file exists but cannot be read."""
-        from model_lens.inference_engine import InferenceEngine
-
+    def test_label_map_file_unreadable_raises_configuration_error(self, tmp_path: Path) -> None:
+        """A labels_path that exists but cannot be read raises ConfigurationError."""
+        model_file = self._make_model_file(tmp_path)
         labels_file = tmp_path / "labels.txt"
         labels_file.write_text("person\n", encoding="utf-8")
-
-        with patch.object(Path, "read_text", side_effect=OSError("permission denied")):
-            with pytest.raises(ConfigurationError):
-                InferenceEngine._load_label_map(str(labels_file))
-
-
-class TestPackageDataResourceResolution:
-    """1.4 Error Propagation — Package-Data Fallback.
-
-    Exercises the ``except Exception`` block inside ``_resolve_package_resource``
-    that wraps any resolution failure as ``FileNotFoundError``, and verifies that
-    ``TorchInferenceEngine._resolve_path`` surfaces this as ``ConfigurationError``.
-    """
-
-    @pytest.mark.unit
-    def test_resolve_package_resource_wraps_exception_as_file_not_found_error(self) -> None:
-        """_resolve_package_resource wraps any internal exception as FileNotFoundError."""
-        with patch(
-            "importlib.resources.files",
-            side_effect=Exception("unexpected internal error"),
-        ):
-            with pytest.raises(FileNotFoundError):
-                _resolve_package_resource("model.pt")
-
-    @pytest.mark.unit
-    def test_torch_inference_engine_package_data_unresolvable_raises_configuration_error(
-        self,
-        tmp_path: Path,
-        label_map_file: Path,
-    ) -> None:
-        """Raises ConfigurationError when the package-data resource cannot be located.
-
-        Patches ``importlib.resources.files`` to raise an arbitrary exception,
-        simulating a broken or missing package-data installation, and confirms
-        that ``TorchInferenceEngine`` surfaces this as ``ConfigurationError``
-        rather than leaking the internal ``FileNotFoundError``.
-        """
-        with patch(
-            "importlib.resources.files",
-            side_effect=Exception("package data unavailable"),
-        ):
+        labels_file.chmod(0o000)
+        with patch("model_lens.inference_engine.torch.load", return_value=MagicMock()):
             with pytest.raises(ConfigurationError):
                 TorchInferenceEngine(
-                    model_path="",  # triggers package-data resolution for model_path
+                    model_path=str(model_file),
                     confidence_threshold=0.5,
-                    labels_path=str(label_map_file),
+                    labels_path=str(labels_file),
                 )
+
+
+class TestPackageDataFallbackLabelMap:
+    """1.4 Error Propagation — Package-Data Fallback (label map)."""
+
+    @pytest.mark.unit
+    @patch("importlib.resources.files")
+    def test_torch_inference_engine_package_data_resolves_successfully(
+        self, mock_files, tmp_path: Path, dummy_model_file: Path
+    ) -> None:
+        """Constructor succeeds when labels_path='' and package-data resource is present."""
+        labels = tmp_path / "pkg_labels.txt"
+        labels.write_text("person\nbicycle\ncar\n", encoding="utf-8")
+        
+        mock_path = MagicMock()
+        mock_path.joinpath.return_value = str(labels)
+        mock_files.return_value = mock_path
+        
+        with patch("model_lens.inference_engine.torch.load", return_value=MagicMock()):
+            engine = TorchInferenceEngine(
+                model_path=str(dummy_model_file),
+                confidence_threshold=0.5,
+                labels_path="",
+            )
+        assert engine is not None
+        mock_files.assert_called_with("model_lens")
+
+    @pytest.mark.unit
+    @patch("importlib.resources.files")
+    def test_torch_inference_engine_package_data_unresolvable_raises_configuration_error(
+        self, mock_files, tmp_path: Path, dummy_model_file: Path
+    ) -> None:
+        """labels_path='' and package-data resource cannot be resolved raises ConfigurationError."""
+        mock_files.side_effect = Exception("System resource access denied")
+        
+        with pytest.raises(ConfigurationError) as excinfo:
+            TorchInferenceEngine(
+                model_path=str(dummy_model_file),
+                confidence_threshold=0.5,
+                labels_path="",
+            )
+        assert "could not be resolved: System resource access denied" in str(excinfo.value)
 
 
 # ===========================================================================
@@ -348,17 +324,16 @@ class TestPackageDataFallback:
     """3.1 & 3.2 Package-data fallback — empty model_path / labels_path."""
 
     @pytest.mark.unit
-    def test_empty_model_path_uses_package_data(self, tmp_path: Path, label_map_file: Path) -> None:
-        """model_path='' triggers package-data resolution; succeeds when resource is found."""
+    @patch("importlib.resources.files")
+    def test_empty_model_path_uses_package_data(self, mock_files, tmp_path: Path, label_map_file: Path) -> None:
         dummy_model = tmp_path / "model.pt"
         dummy_model.write_bytes(b"")
-        with (
-            patch(
-                "model_lens.inference_engine._resolve_package_resource",
-                return_value=str(dummy_model),
-            ),
-            patch("model_lens.inference_engine.torch.load", return_value=MagicMock()),
-        ):
+        
+        mock_path = MagicMock()
+        mock_path.joinpath.return_value = str(dummy_model)
+        mock_files.return_value = mock_path
+        
+        with patch("model_lens.inference_engine.torch.load", return_value=MagicMock()):
             engine = TorchInferenceEngine(
                 model_path="",
                 confidence_threshold=0.5,
@@ -373,7 +348,7 @@ class TestPackageDataFallback:
         labels.write_text("person\nbicycle\ncar\n", encoding="utf-8")
         with (
             patch(
-                "model_lens.inference_engine._resolve_package_resource",
+                "model_lens.inference_engine.InferenceEngine._resolve_package_resource",
                 return_value=str(labels),
             ),
             patch("model_lens.inference_engine.torch.load", return_value=MagicMock()),
@@ -386,24 +361,23 @@ class TestPackageDataFallback:
         assert engine is not None
 
     @pytest.mark.unit
-    def test_empty_model_path_package_data_missing(self, tmp_path: Path, label_map_file: Path) -> None:
-        """model_path='' and package-data resource cannot be resolved raises ConfigurationError."""
-        with patch(
-            "model_lens.inference_engine._resolve_package_resource",
-            side_effect=FileNotFoundError("no package data"),
-        ):
-            with pytest.raises(ConfigurationError):
-                TorchInferenceEngine(
-                    model_path="",
-                    confidence_threshold=0.5,
-                    labels_path=str(label_map_file),
-                )
+    @patch("importlib.resources.files")
+    def test_empty_model_path_package_data_missing(self, mock_files, tmp_path: Path, label_map_file: Path) -> None:
+        mock_files.side_effect = RuntimeError("Resource busy")
+        
+        with pytest.raises(ConfigurationError) as excinfo:
+            TorchInferenceEngine(
+                model_path="",
+                confidence_threshold=0.5,
+                labels_path=str(label_map_file),
+            )
+        assert "Resource busy" in str(excinfo.value)
 
     @pytest.mark.unit
     def test_empty_labels_path_package_data_missing(self, tmp_path: Path, dummy_model_file: Path) -> None:
         """labels_path='' and package-data resource cannot be resolved raises ConfigurationError."""
         with patch(
-            "model_lens.inference_engine._resolve_package_resource",
+            "model_lens.inference_engine.InferenceEngine._resolve_package_resource",
             side_effect=FileNotFoundError("no package data"),
         ):
             with pytest.raises(ConfigurationError):

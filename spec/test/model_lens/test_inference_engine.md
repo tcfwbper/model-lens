@@ -66,6 +66,7 @@ from model_lens.inference_engine import TorchInferenceEngine
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
+| `test_torch_inference_engine_package_data_resolves_successfully` | `unit` | Constructor succeeds when `labels_path` is empty and package-data resource is present | `labels_path=""` with package data available | engine constructed without raising |
 | `test_torch_inference_engine_package_data_unresolvable_raises_configuration_error` | `unit` | Raises `ConfigurationError` when the package-data resource cannot be located | `model_path=""` or `labels_path=""` with package data absent | raises `ConfigurationError` |
 
 ---
@@ -190,9 +191,7 @@ from model_lens.inference_engine import TorchInferenceEngine
 
 | Entity | Test Count (approx.) | unit | e2e | race | Key Concerns |
 |---|---|---|---|---|---|
-| `TorchInferenceEngine.__init__` (label map) | 9 | 9 | 0 | 0 | sequential indexing, blank line slot consumption, whitespace stripping, missing file, empty file, all-blank file |
-| `InferenceEngine._load_label_map` (direct — coverage gaps) | 2 | 2 | 0 | 0 | file-not-found branch (line 116), OSError-on-read branch (lines 120-121) |
-| `_resolve_package_resource` (coverage gap) | 1 | 1 | 0 | 0 | except-block wraps any Exception as FileNotFoundError (lines 61-66) |
+| `TorchInferenceEngine.__init__` (label map) | 13 | 13 | 0 | 0 | sequential indexing, blank line slot consumption, whitespace stripping, missing file, empty file, all-blank file, unreadable file, package-data success, package-data unresolvable |
 | `TorchInferenceEngine.__init__` (model) | 3 | 3 | 0 | 0 | successful load, missing file, corrupt file |
 | `TorchInferenceEngine.__init__` (confidence_threshold) | 5 | 5 | 0 | 0 | zero, negative, above one, upper boundary, just above zero |
 | `TorchInferenceEngine.__init__` (package-data fallback) | 4 | 4 | 0 | 0 | empty model path success/failure, empty labels path success/failure |
