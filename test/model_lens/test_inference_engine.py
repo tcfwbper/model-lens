@@ -25,15 +25,6 @@ from model_lens.exceptions import ConfigurationError, OperationError, ParseError
 from model_lens.inference_engine import TorchInferenceEngine
 
 # ---------------------------------------------------------------------------
-# Re-export fixtures so pytest can discover them
-# ---------------------------------------------------------------------------
-from test.model_lens.fixtures.inference_engine import (  # noqa: F401
-    dummy_model_file,
-    engine_with_mock_model,
-    label_map_file,
-)
-
-# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
