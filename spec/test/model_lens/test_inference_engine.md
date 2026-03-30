@@ -49,6 +49,25 @@ from model_lens.inference_engine import TorchInferenceEngine
 | `test_label_map_empty_file` | `unit` | A completely empty file (zero bytes) raises `ParseError` | File: `""` (empty) | raises `ParseError` |
 | `test_label_map_only_blank_lines` | `unit` | A file containing only blank lines raises `ParseError` | File: `"\n\n\n"` | raises `ParseError` |
 
+### 1.3 Validation Failures — Label Map Loading
+
+> These tests verify that the base class label map loader rejects a missing
+> or unreadable file with the correct exception type.
+
+| Test ID | Category | Description | Input | Expected |
+|---|---|---|---|---|
+| `test_inference_engine_label_map_file_not_found_raises_configuration_error` | `unit` | Raises `ConfigurationError` when the label map file does not exist | `labels_path` points to a non-existent file | raises `ConfigurationError` |
+| `test_inference_engine_label_map_file_unreadable_raises_configuration_error` | `unit` | Raises `ConfigurationError` when the label map file exists but cannot be read | `labels_path` points to an unreadable file | raises `ConfigurationError` |
+
+### 1.4 Error Propagation — Package-Data Fallback
+
+> Verifies that a failure to resolve a package-data resource surfaces as
+> `ConfigurationError` at the constructor call site.
+
+| Test ID | Category | Description | Input | Expected |
+|---|---|---|---|---|
+| `test_torch_inference_engine_package_data_unresolvable_raises_configuration_error` | `unit` | Raises `ConfigurationError` when the package-data resource cannot be located | `model_path=""` or `labels_path=""` with package data absent | raises `ConfigurationError` |
+
 ---
 
 ## 2. `TorchInferenceEngine` — Constructor: Model Loading
@@ -172,6 +191,8 @@ from model_lens.inference_engine import TorchInferenceEngine
 | Entity | Test Count (approx.) | unit | e2e | race | Key Concerns |
 |---|---|---|---|---|---|
 | `TorchInferenceEngine.__init__` (label map) | 9 | 9 | 0 | 0 | sequential indexing, blank line slot consumption, whitespace stripping, missing file, empty file, all-blank file |
+| `InferenceEngine._load_label_map` (direct — coverage gaps) | 2 | 2 | 0 | 0 | file-not-found branch (line 116), OSError-on-read branch (lines 120-121) |
+| `_resolve_package_resource` (coverage gap) | 1 | 1 | 0 | 0 | except-block wraps any Exception as FileNotFoundError (lines 61-66) |
 | `TorchInferenceEngine.__init__` (model) | 3 | 3 | 0 | 0 | successful load, missing file, corrupt file |
 | `TorchInferenceEngine.__init__` (confidence_threshold) | 5 | 5 | 0 | 0 | zero, negative, above one, upper boundary, just above zero |
 | `TorchInferenceEngine.__init__` (package-data fallback) | 4 | 4 | 0 | 0 | empty model path success/failure, empty labels path success/failure |
