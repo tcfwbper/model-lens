@@ -798,6 +798,19 @@ class TestRunOneIterationQueueCapacity:
                 pipeline._run_one_iteration()
         mock_logger.debug.assert_called()
 
+    @pytest.mark.race
+    def test_run_one_iteration_publishes_when_queue_drained_between_full_check_and_get(
+        self, pipeline: DetectionPipeline
+    ) -> None:
+        q = pipeline.get_queue()
+        # Queue is actually empty, but full() reports True (TOCTOU race).
+        with patch.object(q, "full", side_effect=[True, False]):
+            with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
+                pipeline._run_one_iteration()
+
+        assert q.qsize() == 1
+        assert isinstance(q.get_nowait(), PipelineResult)
+
 
 class TestRunOneIterationFpsThrottle:
     """7.9 Boundary Values — FPS throttle."""
@@ -870,15 +883,17 @@ class TestRunOneIterationConcurrentLock:
     ) -> None:
         call_order: list[str] = []
 
-        original_release = pipeline._config_lock.release
-
-        def recording_release():
-            call_order.append("release")
-            original_release()
+        # threading.Lock is a C extension type whose methods are read-only,
+        # so we replace the entire lock with a MagicMock that wraps it.
+        real_lock = pipeline._config_lock
+        mock_lock = MagicMock(wraps=real_lock)
+        mock_lock.release = MagicMock(side_effect=lambda: (call_order.append("release"), real_lock.release())[-1])
+        mock_lock.acquire = MagicMock(side_effect=lambda *a, **kw: real_lock.acquire(*a, **kw))
+        mock_lock.__enter__ = MagicMock(side_effect=lambda: real_lock.__enter__())
+        mock_lock.__exit__ = MagicMock(side_effect=lambda *a: (call_order.append("release"), real_lock.__exit__(*a))[-1])
+        pipeline._config_lock = mock_lock
 
         mock_engine.detect.side_effect = lambda *a, **kw: call_order.append("detect") or []
-
-        pipeline._config_lock.release = recording_release  # type: ignore[method-assign]
 
         with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
             pipeline._run_one_iteration()
@@ -909,12 +924,13 @@ class TestRunOneIterationNonBlockingQueue:
     @pytest.mark.unit
     def test_run_one_iteration_uses_put_nowait(self, pipeline: DetectionPipeline) -> None:
         q = pipeline.get_queue()
+        # Note: Queue.put_nowait() internally delegates to put(), so we cannot
+        # mock put() without breaking put_nowait(). Instead, just verify that
+        # put_nowait was the entry point used by the production code.
         with patch.object(q, "put_nowait", wraps=q.put_nowait) as mock_put_nowait:
-            with patch.object(q, "put") as mock_put:
-                with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
-                    pipeline._run_one_iteration()
+            with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
+                pipeline._run_one_iteration()
         mock_put_nowait.assert_called_once()
-        mock_put.assert_not_called()
 
     @pytest.mark.unit
     def test_run_one_iteration_uses_get_nowait_on_full_queue(self, pipeline: DetectionPipeline) -> None:
@@ -922,12 +938,13 @@ class TestRunOneIterationNonBlockingQueue:
         for _ in range(5):
             q.put_nowait(object())
 
+        # Note: Queue.get_nowait() internally delegates to get(), so we cannot
+        # mock get() without preventing actual item removal (causing queue.Full).
+        # Instead, just verify that get_nowait was the entry point used.
         with patch.object(q, "get_nowait", wraps=q.get_nowait) as mock_get_nowait:
-            with patch.object(q, "get") as mock_get:
-                with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
-                    pipeline._run_one_iteration()
+            with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
+                pipeline._run_one_iteration()
         mock_get_nowait.assert_called_once()
-        mock_get.assert_not_called()
 
 
 # ===========================================================================

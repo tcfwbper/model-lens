@@ -29,15 +29,9 @@ import time
 from dataclasses import dataclass
 
 import cv2
-import numpy as np
 
 from model_lens.camera_capture import LocalCamera, RtspCamera
-from model_lens.entities import (
-    DetectionResult,
-    LocalCameraConfig,
-    RtspCameraConfig,
-    RuntimeConfig,
-)
+from model_lens.entities import DetectionResult, LocalCameraConfig, RtspCameraConfig, RuntimeConfig
 from model_lens.exceptions import DeviceNotFoundError, OperationError, ParseError
 from model_lens.inference_engine import InferenceEngine
 
@@ -65,7 +59,7 @@ class PipelineResult:
     detections: list[DetectionResult]
 
 
-class DetectionPipeline:
+class DetectionPipeline:  # pylint: disable=too-many-instance-attributes
     """Background component that owns the frame loop.
 
     Reads frames from :class:`~model_lens.camera_capture.CameraCapture`, runs inference via
@@ -187,27 +181,22 @@ class DetectionPipeline:
         while not self._stop_event.is_set():
             self._run_one_iteration()
 
-    def _run_one_iteration(self) -> None:
+    def _run_one_iteration(self) -> None:  # pylint: disable=too-many-branches
         """Execute one iteration of the frame loop.
 
-        Implements the 10-step pipeline:
+        Implements the 9-step pipeline:
 
-        1. Check ``_stop_event`` — exit if set.
-        2. Check ``_camera_changed_event`` — recreate :class:`~model_lens.camera_capture.CameraCapture` if set.
-        3. If no active camera — wait for ``_camera_changed_event``, then return.
-        4. FPS throttle check — interruptible wait if within minimum inter-frame interval.
-        5. Read a :class:`~model_lens.entities.Frame` from the camera.
-        6. Convert BGR → RGB (copy; do not modify ``Frame.data``).
-        7. JPEG-encode the RGB frame.
-        8. Run inference via :meth:`~model_lens.inference_engine.InferenceEngine.detect`.
-        9. Construct a :class:`PipelineResult`.
-        10. Publish to the queue (drop oldest if full).
+        1. Check ``_camera_changed_event`` — recreate :class:`~model_lens.camera_capture.CameraCapture` if set.
+        2. If no active camera — wait for ``_camera_changed_event``, then return.
+        3. FPS throttle check — interruptible wait if within minimum inter-frame interval.
+        4. Read a :class:`~model_lens.entities.Frame` from the camera.
+        5. Convert BGR → RGB (copy; do not modify ``Frame.data``).
+        6. JPEG-encode the RGB frame.
+        7. Run inference via :meth:`~model_lens.inference_engine.InferenceEngine.detect`.
+        8. Construct a :class:`PipelineResult`.
+        9. Publish to the queue (drop oldest if full).
         """
-        # ① Stop check
-        if self._stop_event.is_set():
-            return
-
-        # ② Camera changed event
+        # ① Camera changed event
         if self._camera_changed_event.is_set():
             self._camera_changed_event.clear()
             if self._camera is not None:
@@ -218,12 +207,12 @@ class DetectionPipeline:
             new_camera = self._build_camera(current_config)
             self._camera = new_camera
 
-        # ③ No active camera — wait for a new config
+        # ② No active camera — wait for a new config
         if self._camera is None:
             self._camera_changed_event.wait(timeout=1.0)
             return
 
-        # ④ FPS throttle
+        # ③ FPS throttle
         if self._last_frame_time != 0.0:
             elapsed = time.monotonic() - self._last_frame_time
             remaining = _MIN_INTER_FRAME_INTERVAL - elapsed
@@ -232,7 +221,7 @@ class DetectionPipeline:
                 if self._stop_event.is_set():
                     return
 
-        # ⑤ Frame read
+        # ④ Frame read
         try:
             frame = self._camera.read()
         except OperationError as exc:
@@ -241,17 +230,17 @@ class DetectionPipeline:
             self._camera = None
             return
 
-        # ⑥ BGR → RGB conversion
+        # ⑤ BGR → RGB conversion
         rgb_frame = frame.data[:, :, ::-1].copy()
 
-        # ⑦ JPEG encoding
+        # ⑥ JPEG encoding
         success, buffer = cv2.imencode(".jpg", rgb_frame)
         if not success:
             logger.warning("cv2.imencode failed; skipping frame from source %r", frame.source)
             return
         jpeg_bytes = buffer.tobytes()
 
-        # ⑧ Inference — read target_labels under lock, then release before detect()
+        # ⑦ Inference — read target_labels under lock, then release before detect()
         with self._config_lock:
             target_labels = self._config.target_labels
 
@@ -264,7 +253,7 @@ class DetectionPipeline:
             logger.critical("Label map mismatch — model and label map are permanently mismatched: %s", exc)
             sys.exit(1)
 
-        # ⑨ Construct PipelineResult
+        # ⑧ Construct PipelineResult
         pipeline_result = PipelineResult(
             jpeg_bytes=jpeg_bytes,
             timestamp=frame.timestamp,
@@ -272,7 +261,7 @@ class DetectionPipeline:
             detections=results,
         )
 
-        # ⑩ Publish to queue (drop oldest if full)
+        # ⑨ Publish to queue (drop oldest if full)
         if self._queue.full():
             try:
                 self._queue.get_nowait()

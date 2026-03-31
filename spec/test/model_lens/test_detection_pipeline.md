@@ -271,6 +271,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 |---|---|---|---|---|
 | `test_run_one_iteration_drops_oldest_when_queue_full` | `unit` | When the queue is full, the oldest item is discarded before the new result is put | fill the queue to `maxsize=5` with sentinel values; call `_run_one_iteration()` | queue still has `5` items; the oldest sentinel is gone; the newest `PipelineResult` is present |
 | `test_run_one_iteration_logs_debug_on_drop` | `unit` | A `DEBUG` message is logged when a frame is dropped due to a full queue | same as above | `logging.debug` (or equivalent) called at least once |
+| `test_run_one_iteration_publishes_when_queue_drained_between_full_check_and_get` | `race` | TOCTOU race: `full()` returns `True` but consumers drain the queue before `get_nowait()` executes, causing `queue.Empty` — the result must still be published | patch `queue.full` to return `True` on the first call while the underlying queue is actually empty; call `_run_one_iteration()` | no exception raised; `pipeline.get_queue().qsize() == 1` and the item is a `PipelineResult` |
 
 ### 7.9 Boundary Values — FPS throttle
 
@@ -382,7 +383,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `DetectionPipeline.stop` | 7 | 0 | 7 | 0 | `_stop_event` set, thread joined, camera closed after join, engine not closed, idempotent, safe with no camera |
 | `DetectionPipeline.update_config` | 3 | 3 | 0 | 0 | config replaced, event set, returns immediately |
 | `DetectionPipeline.get_queue` | 2 | 2 | 0 | 0 | returns `queue.Queue`, same object each call |
-| `DetectionPipeline._run_one_iteration` | 40 | 38 | 0 | 2 | BGR→RGB conversion, JPEG encoding failure, inference errors, camera read errors, FPS throttle boundary, queue drop-oldest, lock/detect ordering, non-blocking queue methods |
+| `DetectionPipeline._run_one_iteration` | 41 | 38 | 0 | 3 | BGR→RGB conversion, JPEG encoding failure, inference errors, camera read errors, FPS throttle boundary, queue drop-oldest, TOCTOU race on full-then-empty queue, lock/detect ordering, non-blocking queue methods |
 | End-to-End — FPS cap | 1 | 0 | 1 | 0 | actual output rate ≤ 30 FPS over 1-second window |
 | Concurrency — `update_config` | 3 | 0 | 0 | 3 | no exception under concurrent writes, final config is one of the submitted values, event set |
 | Concurrency — `stop()` | 2 | 0 | 0 | 2 | clean join from separate thread, throttle wait interrupted by stop signal |
