@@ -31,11 +31,6 @@ from model_lens.config import (
     validate,
 )
 from model_lens.exceptions import ConfigurationError
-from test.model_lens.fixtures.config import (  # noqa: F401  (re-exported for pytest)
-    bundled_paths,
-    minimal_toml_content,
-    valid_app_config,
-)
 
 # ---------------------------------------------------------------------------
 # 1. ServerConfig
@@ -695,6 +690,23 @@ def test_validate_confidence_threshold_max_boundary_valid(bundled_paths: tuple[P
 # ---------------------------------------------------------------------------
 
 
+def _assert_log_call(mock_method: MagicMock, *expected_substrings: str) -> None:
+    """Assert that a logger mock was called with args that contain all expected substrings.
+
+    This helper is format-agnostic: it works regardless of whether the logger
+    uses %-style formatting (``logger.info("msg %s", arg)``) or f-strings, by
+    joining all positional call arguments into a single string before matching.
+    """
+    for call in mock_method.call_args_list:
+        call_str = " ".join(str(a) for a in call.args)
+        if all(s in call_str for s in expected_substrings):
+            return
+    raise AssertionError(
+        f"No call found containing all of {expected_substrings!r}. "
+        f"Actual calls: {mock_method.call_args_list}"
+    )
+
+
 def _make_importlib_resources_mock(model_path: str, labels_path: str) -> MagicMock:
     """Build a mock for importlib.resources that returns the given paths.
 
@@ -811,7 +823,7 @@ def test_load_default_config_file_logs_info(
     with patch("model_lens.config.logger") as mock_logger:
         load()
 
-    mock_logger.info.assert_any_call(f"Loading config from {config_file}")
+    _assert_log_call(mock_logger.info, "Loading config from", str(config_file))
 
 
 # --- 6.3 Explicit --config flag ---
@@ -857,7 +869,7 @@ def test_load_explicit_config_flag_logs_info(
     with patch("model_lens.config.logger") as mock_logger:
         load()
 
-    mock_logger.info.assert_any_call(f"Loading config from {config_file}")
+    _assert_log_call(mock_logger.info, "Loading config from", str(config_file))
 
 
 # --- 6.4 TOML overrides ---
@@ -1207,7 +1219,7 @@ def test_load_env_override_logs_debug(
         _configure_resources_mock(mock_res, str(model_file), str(labels_file))
         load()
 
-    mock_logger.debug.assert_any_call('Env override: ML_SERVER_PORT="9999" → server.port')
+    _assert_log_call(mock_logger.debug, "ML_SERVER_PORT", "9999", "server", "port")
 
 
 # --- 7.2 Validation failures ---
@@ -1379,7 +1391,7 @@ def test_load_bundled_resolution_logs_debug(
         _configure_resources_mock(mock_res, str(model_file), str(labels_file))
         load()
 
-    mock_logger.debug.assert_any_call(f"Resolved bundled model_path to {model_file}")
+    _assert_log_call(mock_logger.debug, "Resolved bundled model_path", str(model_file))
 
 
 # --- 8.2 Error propagation ---
