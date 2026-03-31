@@ -130,6 +130,17 @@ Called by the Config API to apply a new `RuntimeConfig`. Thread-safe.
 This method returns immediately; the camera recreation happens asynchronously inside the frame
 loop on the next iteration.
 
+#### `get_config() -> RuntimeConfig`
+
+Returns a snapshot of the current `RuntimeConfig`. Thread-safe.
+
+1. Acquires the `RuntimeConfig` lock.
+2. Reads the stored `RuntimeConfig` reference.
+3. Releases the lock.
+4. Returns the reference.
+
+Called by the Config API to read the current configuration for reporting or comparison purposes.
+
 #### `get_queue() -> queue.Queue[PipelineResult]`
 
 Returns the result queue. Called once by the Stream API at startup to obtain the queue reference.
@@ -277,7 +288,7 @@ Web Server tears down InferenceEngine (outside pipeline responsibility)
 
 | Shared Resource | Protection Mechanism |
 |---|---|
-| `RuntimeConfig` reference | `threading.Lock` acquired for read (snapshot) and write (swap) |
+| `RuntimeConfig` reference | `threading.Lock` acquired for read (snapshot in frame loop and `get_config()`) and write (swap in `update_config()`) |
 | `CameraCapture` instance | Owned exclusively by the background thread; only recreated inside the frame loop; `close()` called from `stop()` only after the thread has exited |
 | `InferenceEngine` | Per-instance lock inside `InferenceEngine.detect()` (owned by the engine) |
 | `queue.Queue` | Thread-safe by design (`queue.Queue` is internally synchronised) |

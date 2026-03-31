@@ -22,6 +22,7 @@ import pytest
 from model_lens.config import (
     AppConfig,
     CameraConfig,
+    ConfigLoader,
     ModelConfig,
     ServerConfig,
     load,
@@ -325,6 +326,30 @@ from model_lens.exceptions import ConfigurationError
 
 ---
 
+## 9. `ConfigLoader`
+
+> `ConfigLoader` is the class-based entry point for configuration loading, defined in
+> `src/model_lens/config.py`. It wraps the resolution, merging, validation, and construction
+> logic that produces an `AppConfig`. Callers (e.g. `app.py` lifespan) instantiate
+> `ConfigLoader` and call `load()`.
+
+### 9.1 Happy Path — Construction and Load
+
+| Test ID | Category | Description | Input | Expected |
+|---|---|---|---|---|
+| `test_config_loader_instantiation` | unit | `ConfigLoader` can be instantiated without arguments | `ConfigLoader()` | does not raise |
+| `test_config_loader_load_returns_app_config` | unit | `ConfigLoader().load()` returns an `AppConfig` instance | bundled paths mocked; no TOML file | `isinstance(result, AppConfig)` |
+| `test_config_loader_load_uses_defaults_when_no_config_file` | unit | When no `--config` flag and no `model_lens.toml` in cwd, built-in defaults are used | `sys.argv = ["prog"]`; cwd has no `model_lens.toml`; bundled paths mocked | `result.server.port == 8080` |
+
+### 9.2 Error Propagation
+
+| Test ID | Category | Description | Input | Expected |
+|---|---|---|---|---|
+| `test_config_loader_load_raises_configuration_error_on_invalid_config` | unit | `ConfigLoader().load()` raises `ConfigurationError` when validation fails | env override sets `ML_SERVER_PORT="0"`; bundled paths mocked | `raises ConfigurationError` |
+| `test_config_loader_load_raises_configuration_error_on_invalid_toml` | unit | `ConfigLoader().load()` raises `ConfigurationError` when TOML is malformed | config file containing `not valid toml :::` | `raises ConfigurationError` with message starting `"Failed to parse config file at "` |
+
+---
+
 ## Summary Table
 
 | Entity | Test Count (approx.) | unit | e2e | race | Key Concerns |
@@ -338,3 +363,4 @@ from model_lens.exceptions import ConfigurationError
 | `load()` — TOML merging | 5 | 5 | 0 | 0 | partial override, unknown keys ignored, missing keys retain defaults |
 | `load()` — env var overrides | 10 | 10 | 0 | 0 | all 9 env vars, coercion for int/float/str, debug logging |
 | `load()` — package-data resolution | 7 | 7 | 0 | 0 | bundled path resolved, skipped when set, failure cases, debug logging |
+| `ConfigLoader` | 5 | 5 | 0 | 0 | instantiation, load returns `AppConfig`, error propagation |
