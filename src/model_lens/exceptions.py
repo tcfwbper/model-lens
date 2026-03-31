@@ -29,7 +29,7 @@ class ModelLensError(Exception):
         TypeError: If called with zero or more than one positional argument.
     """
 
-    def __init__(self, message: str) -> None:  # pylint: disable=useless-super-delegation
+    def __init__(self, message: str) -> None:
         """Initialise the exception with a single message string.
 
         Args:

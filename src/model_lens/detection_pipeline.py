@@ -59,7 +59,7 @@ class PipelineResult:
     detections: list[DetectionResult]
 
 
-class DetectionPipeline:  # pylint: disable=too-many-instance-attributes
+class DetectionPipeline:
     """Background component that owns the frame loop.
 
     Reads frames from :class:`~model_lens.camera_capture.CameraCapture`, runs inference via
@@ -181,7 +181,7 @@ class DetectionPipeline:  # pylint: disable=too-many-instance-attributes
         while not self._stop_event.is_set():
             self._run_one_iteration()
 
-    def _run_one_iteration(self) -> None:  # pylint: disable=too-many-branches
+    def _run_one_iteration(self) -> None:
         """Execute one iteration of the frame loop.
 
         Implements the 9-step pipeline:

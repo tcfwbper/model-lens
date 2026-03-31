@@ -182,7 +182,7 @@ _ENV_MAP: list[tuple[str, str, str, type]] = [
 # ---------------------------------------------------------------------------
 
 
-def load() -> AppConfig:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+def load() -> AppConfig:
     """Load, merge, and validate application configuration.
 
     Resolution order (highest priority wins):
