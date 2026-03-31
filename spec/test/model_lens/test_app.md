@@ -358,19 +358,18 @@ def lifespan_mocks(tmp_path):
     mock_config.camera.device_index = 0
 
     with (
-        patch("model_lens.app.ConfigLoader") as mock_loader_cls,
+        patch("model_lens.app.load", return_value=mock_config) as mock_load,
         patch("model_lens.app.TorchInferenceEngine") as mock_engine_cls,
         patch("model_lens.app.DetectionPipeline") as mock_pipeline_cls,
         patch("model_lens.app.resolve_dist_dir", return_value=dist_dir),
     ):
-        mock_loader_cls.return_value.load.return_value = mock_config
         mock_engine = MagicMock()
         mock_engine_cls.return_value = mock_engine
         mock_pipeline = MagicMock()
         mock_pipeline_cls.return_value = mock_pipeline
 
         yield {
-            "loader_cls": mock_loader_cls,
+            "load": mock_load,
             "engine_cls": mock_engine_cls,
             "engine": mock_engine,
             "pipeline_cls": mock_pipeline_cls,
@@ -383,7 +382,6 @@ def lifespan_mocks(tmp_path):
 
 | Test ID | Category | Description | Expected |
 |---|---|---|---|
-| `test_lifespan_config_loader_called` | `unit` | `ConfigLoader.load()` is called during startup | `lifespan_mocks["loader_cls"].return_value.load.call_count == 1` |
 | `test_lifespan_inference_engine_constructed` | `unit` | `TorchInferenceEngine` is constructed with values from `AppConfig` | `lifespan_mocks["engine_cls"]` called with `model_path`, `confidence_threshold`, `labels_path` from `mock_config.model` |
 | `test_lifespan_detection_pipeline_constructed` | `unit` | `DetectionPipeline` is constructed with the engine and initial `RuntimeConfig` | `lifespan_mocks["pipeline_cls"]` called once |
 | `test_lifespan_initial_runtime_config_camera_from_app_config` | `unit` | The `RuntimeConfig` passed to `DetectionPipeline` has a `camera` whose attributes match `AppConfig.camera` (e.g. `device_index` equals `mock_config.camera.device_index`) | inspect the first positional or keyword argument passed to `lifespan_mocks["pipeline_cls"]`; the `RuntimeConfig`'s `camera.device_index == mock_config.camera.device_index` |
@@ -403,7 +401,7 @@ def lifespan_mocks(tmp_path):
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_lifespan_config_loader_error_exits` | `unit` | `ConfigLoader.load()` raising `ConfigurationError` causes `sys.exit(1)` | `mock_loader.load.side_effect = ConfigurationError("bad config")` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
+| `test_lifespan_load_error_exits` | `unit` | `load()` raising `ConfigurationError` causes `sys.exit(1)` | `mock_load.side_effect = ConfigurationError("bad config")` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
 | `test_lifespan_inference_engine_configuration_error_exits` | `unit` | `TorchInferenceEngine()` raising `ConfigurationError` causes `sys.exit(1)` | `mock_engine_cls.side_effect = ConfigurationError("bad model")` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
 | `test_lifespan_inference_engine_operation_error_exits` | `unit` | `TorchInferenceEngine()` raising `OperationError` causes `sys.exit(1)` | `mock_engine_cls.side_effect = OperationError("load failed")` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
 | `test_lifespan_missing_dist_dir_exits` | `unit` | Missing `dist/` directory causes `sys.exit(1)` | `resolve_dist_dir` raises `FileNotFoundError` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
@@ -544,7 +542,7 @@ def client_with_broken_pipeline(mock_pipeline, tmp_path):
 | `GET /stream` | 21 | 21 | 0 | 0 | event format, base64, keepalive, idle timeout (keepalive does not reset timer), disconnect |
 | Static assets | 9 | 9 | 0 | 0 | `index.html` body, ETag MD5, quoted ETag, static files, 404 |
 | Dependency injection | 3 | 3 | 0 | 0 | `get_pipeline` returns correct instance, used by router, stream router calls `get_queue()` not `get_result_queue()` |
-| Lifespan startup/shutdown | 16 | 16 | 0 | 0 | construction order, AppConfig→RuntimeConfig mapping, `start`/`stop`/`teardown` calls, error propagation |
+| Lifespan startup/shutdown | 15 | 15 | 0 | 0 | construction order, AppConfig→RuntimeConfig mapping, `start`/`stop`/`teardown` calls, error propagation |
 | `LocalCameraRequest` | 3 | 3 | 0 | 0 | default/explicit construction, negative device_index validation |
 | `RtspCameraRequest` | 3 | 3 | 0 | 0 | construction, URL scheme/empty validation |
 | `UpdateCameraRequest` | 3 | 3 | 0 | 0 | discriminated union construction, unknown source_type validation |
