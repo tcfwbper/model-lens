@@ -351,12 +351,76 @@ class TestUpdateConfigHappyPath:
 
 
 # ===========================================================================
-# Section 6 — DetectionPipeline.get_queue
+# Section 6 — DetectionPipeline.get_config
+# ===========================================================================
+
+
+class TestGetConfigHappyPath:
+    """6.1 Happy Path."""
+
+    @pytest.mark.unit
+    def test_get_config_returns_runtime_config(
+        self, pipeline: DetectionPipeline, default_config: RuntimeConfig
+    ) -> None:
+        assert pipeline.get_config() is default_config
+
+    @pytest.mark.unit
+    def test_get_config_returns_updated_config(self, pipeline: DetectionPipeline) -> None:
+        new_config = RuntimeConfig(target_labels=["dog"])
+        pipeline.update_config(new_config)
+        assert pipeline.get_config() is new_config
+
+
+class TestGetConfigConcurrentBehaviour:
+    """6.2 Concurrent Behaviour."""
+
+    @pytest.mark.race
+    def test_get_config_acquires_lock(self, pipeline: DetectionPipeline) -> None:
+        real_lock = pipeline._config_lock
+        mock_lock = MagicMock(wraps=real_lock)
+        mock_lock.__enter__ = MagicMock(side_effect=lambda: real_lock.__enter__())
+        mock_lock.__exit__ = MagicMock(side_effect=lambda *a: real_lock.__exit__(*a))
+        pipeline._config_lock = mock_lock
+
+        pipeline.get_config()
+
+        mock_lock.__enter__.assert_called_once()
+        mock_lock.__exit__.assert_called_once()
+
+    @pytest.mark.race
+    def test_get_config_concurrent_with_update_config(self, pipeline: DetectionPipeline) -> None:
+        exceptions: list[Exception] = []
+
+        def getter() -> None:
+            try:
+                result = pipeline.get_config()
+                assert isinstance(result, RuntimeConfig)
+            except Exception as exc:  # noqa: BLE001
+                exceptions.append(exc)
+
+        def updater(i: int) -> None:
+            try:
+                pipeline.update_config(RuntimeConfig(target_labels=[f"label_{i}"]))
+            except Exception as exc:  # noqa: BLE001
+                exceptions.append(exc)
+
+        threads = [threading.Thread(target=getter) for _ in range(10)]
+        threads += [threading.Thread(target=updater, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5.0)
+
+        assert exceptions == []
+
+
+# ===========================================================================
+# Section 7 — DetectionPipeline.get_queue
 # ===========================================================================
 
 
 class TestGetQueueHappyPath:
-    """6.1 Happy Path."""
+    """7.1 Happy Path."""
 
     @pytest.mark.unit
     def test_get_queue_returns_queue_instance(self, pipeline: DetectionPipeline) -> None:
@@ -370,7 +434,7 @@ class TestGetQueueHappyPath:
 
 
 # ===========================================================================
-# Section 7 — DetectionPipeline._run_one_iteration
+# Section 8 — DetectionPipeline._run_one_iteration
 # ===========================================================================
 
 
@@ -381,7 +445,7 @@ def _make_mock_buffer() -> MagicMock:
 
 
 class TestRunOneIterationHappyPath:
-    """7.1 Happy Path — Full Iteration."""
+    """8.1 Happy Path — Full Iteration."""
 
     @pytest.mark.unit
     def test_run_one_iteration_reads_frame(
@@ -467,7 +531,7 @@ class TestRunOneIterationHappyPath:
 
 
 class TestRunOneIterationBgrToRgb:
-    """7.2 Happy Path — BGR→RGB Conversion."""
+    """8.2 Happy Path — BGR→RGB Conversion."""
 
     @pytest.mark.unit
     def test_run_one_iteration_converts_bgr_to_rgb(
@@ -515,7 +579,7 @@ class TestRunOneIterationBgrToRgb:
 
 
 class TestRunOneIterationEncodeFailure:
-    """7.3 Error Propagation — JPEG Encoding."""
+    """8.3 Error Propagation — JPEG Encoding."""
 
     @pytest.mark.unit
     def test_run_one_iteration_skips_frame_on_encode_failure(self, pipeline: DetectionPipeline) -> None:
@@ -532,7 +596,7 @@ class TestRunOneIterationEncodeFailure:
 
 
 class TestRunOneIterationInferenceErrors:
-    """7.4 Error Propagation — Inference Engine."""
+    """8.4 Error Propagation — Inference Engine."""
 
     @pytest.mark.unit
     def test_run_one_iteration_skips_frame_on_operation_error(
@@ -576,7 +640,7 @@ class TestRunOneIterationInferenceErrors:
 
 
 class TestRunOneIterationCameraErrors:
-    """7.5 Error Propagation — Camera Capture."""
+    """8.5 Error Propagation — Camera Capture."""
 
     @pytest.mark.unit
     def test_run_one_iteration_clears_camera_on_operation_error(
@@ -625,7 +689,7 @@ class TestRunOneIterationCameraErrors:
 
 
 class TestRunOneIterationNoneCamera:
-    """7.6 None / Empty Input."""
+    """8.6 None / Empty Input."""
 
     @pytest.mark.unit
     def test_run_one_iteration_does_not_read_when_no_camera(
@@ -659,7 +723,7 @@ class TestRunOneIterationNoneCamera:
 
 
 class TestRunOneIterationStateTransitions:
-    """7.7 State Transitions."""
+    """8.7 State Transitions."""
 
     @pytest.mark.unit
     def test_run_one_iteration_recreates_local_camera_on_event(
@@ -763,7 +827,7 @@ class TestRunOneIterationStateTransitions:
 
 
 class TestRunOneIterationQueueCapacity:
-    """7.8 Boundary Values — queue capacity."""
+    """8.8 Boundary Values — queue capacity."""
 
     @pytest.mark.unit
     def test_run_one_iteration_drops_oldest_when_queue_full(
@@ -813,7 +877,7 @@ class TestRunOneIterationQueueCapacity:
 
 
 class TestRunOneIterationFpsThrottle:
-    """7.9 Boundary Values — FPS throttle."""
+    """8.9 Boundary Values — FPS throttle."""
 
     @pytest.mark.unit
     def test_run_one_iteration_throttle_waits_when_too_fast(
@@ -875,7 +939,7 @@ class TestRunOneIterationFpsThrottle:
 
 
 class TestRunOneIterationConcurrentLock:
-    """7.10 Concurrent Behaviour — lock acquisition."""
+    """8.10 Concurrent Behaviour — lock acquisition."""
 
     @pytest.mark.race
     def test_run_one_iteration_releases_lock_before_detect(
@@ -919,7 +983,7 @@ class TestRunOneIterationConcurrentLock:
 
 
 class TestRunOneIterationNonBlockingQueue:
-    """7.11 Happy Path — queue method calls."""
+    """8.11 Happy Path — queue method calls."""
 
     @pytest.mark.unit
     def test_run_one_iteration_uses_put_nowait(self, pipeline: DetectionPipeline) -> None:
@@ -948,12 +1012,12 @@ class TestRunOneIterationNonBlockingQueue:
 
 
 # ===========================================================================
-# Section 8 — End-to-End: FPS Cap
+# Section 9 — End-to-End: FPS Cap
 # ===========================================================================
 
 
 class TestFpsCap:
-    """8.1 Boundary Values — output rate."""
+    """9.1 Boundary Values — output rate."""
 
     @pytest.mark.e2e
     def test_fps_cap_output_rate_does_not_exceed_30(
@@ -986,12 +1050,12 @@ class TestFpsCap:
 
 
 # ===========================================================================
-# Section 9 — Concurrency: update_config Stress Test
+# Section 10 — Concurrency: update_config Stress Test
 # ===========================================================================
 
 
 class TestUpdateConfigConcurrent:
-    """9.1 Concurrent Behaviour."""
+    """10.1 Concurrent Behaviour."""
 
     @pytest.mark.race
     def test_update_config_concurrent_no_exception(self, pipeline: DetectionPipeline) -> None:
@@ -1058,12 +1122,12 @@ class TestUpdateConfigConcurrent:
 
 
 # ===========================================================================
-# Section 10 — Concurrency: stop() Interrupts Frame Loop
+# Section 11 — Concurrency: stop() Interrupts Frame Loop
 # ===========================================================================
 
 
 class TestStopInterruptsFrameLoop:
-    """10.1 Concurrent Behaviour."""
+    """11.1 Concurrent Behaviour."""
 
     @pytest.mark.race
     def test_stop_from_separate_thread_joins_cleanly(self, pipeline: DetectionPipeline) -> None:
@@ -1107,12 +1171,12 @@ class TestStopInterruptsFrameLoop:
 
 
 # ===========================================================================
-# Section 11 — End-to-End: Recovery from Initial DeviceNotFoundError
+# Section 12 — End-to-End: Recovery from Initial DeviceNotFoundError
 # ===========================================================================
 
 
 class TestRecoveryFromInitFailure:
-    """11.1 State Transitions."""
+    """12.1 State Transitions."""
 
     @pytest.mark.e2e
     def test_recovery_from_init_failure_produces_results(

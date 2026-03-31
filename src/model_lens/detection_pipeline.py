@@ -139,6 +139,17 @@ class DetectionPipeline:
             self._config = new_config
         self._camera_changed_event.set()
 
+    def get_config(self) -> RuntimeConfig:
+        """Return the current :class:`~model_lens.entities.RuntimeConfig`.
+
+        Thread-safe.
+
+        Returns:
+            The current runtime configuration.
+        """
+        with self._config_lock:
+            return self._config
+
     def get_queue(self) -> queue.Queue[PipelineResult]:
         """Return the result queue.
 
