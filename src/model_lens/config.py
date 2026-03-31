@@ -292,3 +292,30 @@ def load() -> AppConfig:
     )
     validate(cfg)
     return cfg
+
+
+# ---------------------------------------------------------------------------
+# ConfigLoader
+# ---------------------------------------------------------------------------
+
+
+class ConfigLoader:
+    """Thin object wrapper around :func:`load`.
+
+    Provides an instantiable interface for loading application configuration, useful in contexts that require dependency
+    injection or subclassing.
+    """
+
+    def load(self) -> AppConfig:
+        """Load, merge, and validate application configuration.
+
+        Delegates entirely to the module-level :func:`load` function.
+
+        Returns:
+            A fully validated, immutable ``AppConfig``.
+
+        Raises:
+            ConfigurationError: If the TOML file is malformed, an env var cannot
+                be coerced, or the merged config fails validation.
+        """
+        return load()

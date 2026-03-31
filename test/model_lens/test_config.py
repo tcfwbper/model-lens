@@ -25,6 +25,7 @@ import pytest
 from model_lens.config import (
     AppConfig,
     CameraConfig,
+    ConfigLoader,
     ModelConfig,
     ServerConfig,
     load,
@@ -1436,3 +1437,84 @@ def test_load_bundled_labels_path_not_found_raises(
 
         with pytest.raises(ConfigurationError, match="Bundled labels file could not be resolved from package data"):
             load()
+
+
+# ---------------------------------------------------------------------------
+# 9. ConfigLoader
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_config_loader_instantiation() -> None:
+    """ConfigLoader can be instantiated without arguments."""
+    ConfigLoader()  # must not raise
+
+
+@pytest.mark.unit
+def test_config_loader_load_returns_app_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    bundled_paths: tuple[Path, Path],
+) -> None:
+    """ConfigLoader().load() returns an AppConfig instance."""
+    model_file, labels_file = bundled_paths
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["prog"])
+
+    with patch("model_lens.config.importlib.resources") as mock_res:
+        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
+        result = ConfigLoader().load()
+
+    assert isinstance(result, AppConfig)
+
+
+@pytest.mark.unit
+def test_config_loader_load_uses_defaults_when_no_config_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    bundled_paths: tuple[Path, Path],
+) -> None:
+    """When no --config flag and no model_lens.toml in cwd, built-in defaults are used."""
+    model_file, labels_file = bundled_paths
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["prog"])
+
+    with patch("model_lens.config.importlib.resources") as mock_res:
+        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
+        result = ConfigLoader().load()
+
+    assert result.server.port == 8080
+
+
+@pytest.mark.unit
+def test_config_loader_load_raises_configuration_error_on_invalid_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    bundled_paths: tuple[Path, Path],
+) -> None:
+    """ConfigLoader().load() raises ConfigurationError when validation fails."""
+    model_file, labels_file = bundled_paths
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["prog"])
+    monkeypatch.setenv("ML_SERVER_PORT", "0")
+
+    with patch("model_lens.config.importlib.resources") as mock_res:
+        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
+        with pytest.raises(ConfigurationError):
+            ConfigLoader().load()
+
+
+@pytest.mark.unit
+def test_config_loader_load_raises_configuration_error_on_invalid_toml(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ConfigLoader().load() raises ConfigurationError when TOML is malformed."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["prog"])
+
+    config_file = tmp_path / "model_lens.toml"
+    config_file.write_text("not valid toml :::")
+
+    with pytest.raises(ConfigurationError, match="Failed to parse config file at "):
+        ConfigLoader().load()
