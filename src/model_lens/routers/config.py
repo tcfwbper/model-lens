@@ -13,17 +13,20 @@
 # limitations under the License.
 """Config router for ModelLens."""
 
+from typing import Any, cast
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from model_lens.detection_pipeline import DetectionPipeline
 from model_lens.entities import LocalCameraConfig, RtspCameraConfig, RuntimeConfig
 from model_lens.schemas import LocalCameraRequest, UpdateCameraRequest, UpdateLabelsRequest
 
 router = APIRouter()
 
 
-def _serialize_config(config: RuntimeConfig) -> dict:
-    camera = config.camera
+def _serialize_config(config: RuntimeConfig) -> dict[str, Any]:
+    camera = cast(LocalCameraConfig | RtspCameraConfig, config.camera)
     if isinstance(camera, LocalCameraConfig):
         cam_dict = {"source_type": "local", "device_index": camera.device_index}
     else:
@@ -36,18 +39,21 @@ def _serialize_config(config: RuntimeConfig) -> dict:
 
 
 @router.get("/config")
-async def get_config(request: Request) -> JSONResponse:
-    pipeline = request.app.state.pipeline
+async def get_config(request: Request) -> JSONResponse:  # type: ignore[type-arg]
+    """Return the current runtime configuration."""
+    pipeline = cast(DetectionPipeline, request.app.state.pipeline)
     config = pipeline.get_config()
     return JSONResponse(_serialize_config(config))
 
 
 @router.put("/config/camera")
-async def put_camera(request: Request, body: UpdateCameraRequest) -> JSONResponse:
-    pipeline = request.app.state.pipeline
+async def put_camera(request: Request, body: UpdateCameraRequest) -> JSONResponse:  # type: ignore[type-arg]
+    """Update the camera source configuration."""
+    pipeline = cast(DetectionPipeline, request.app.state.pipeline)
     current = pipeline.get_config()
 
     camera_req = body.camera
+    new_camera: LocalCameraConfig | RtspCameraConfig | None = None
     if isinstance(camera_req, LocalCameraRequest):
         new_camera = LocalCameraConfig(device_index=camera_req.device_index)
     else:
@@ -63,8 +69,9 @@ async def put_camera(request: Request, body: UpdateCameraRequest) -> JSONRespons
 
 
 @router.put("/config/labels")
-async def put_labels(request: Request, body: UpdateLabelsRequest) -> JSONResponse:
-    pipeline = request.app.state.pipeline
+async def put_labels(request: Request, body: UpdateLabelsRequest) -> JSONResponse:  # type: ignore[type-arg]
+    """Update the target label filter."""
+    pipeline = cast(DetectionPipeline, request.app.state.pipeline)
     current = pipeline.get_config()
 
     new_config = RuntimeConfig(

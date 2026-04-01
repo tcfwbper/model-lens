@@ -15,15 +15,15 @@
 
 import hashlib
 import importlib.resources
-import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import cast
 
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from model_lens.config import load
@@ -40,30 +40,33 @@ def resolve_dist_dir() -> Path:
     return Path(str(pkg)) / "dist"
 
 
-def get_pipeline(request: Request) -> object:
+def get_pipeline(request: Request) -> DetectionPipeline:  # type: ignore[type-arg]
     """Return the pipeline instance from app state."""
-    return request.app.state.pipeline
+    return cast(DetectionPipeline, request.app.state.pipeline)
 
 
 class _StartupExit(SystemExit, Exception):
     """SystemExit subclass that also inherits from Exception.
 
-    This ensures the exit propagates cleanly through anyio's task groups
-    instead of being wrapped in a BaseExceptionGroup.
+    This ensures the exit propagates cleanly through anyio's task groups instead of being wrapped in a
+    BaseExceptionGroup.
     """
 
 
-def _startup() -> tuple:
-    """Run synchronous startup logic. Returns (engine, pipeline) or raises _StartupExit(1)."""
+def _startup() -> tuple[TorchInferenceEngine, DetectionPipeline]:
+    """Run synchronous startup logic.
+
+    Returns (engine, pipeline) or raises _StartupExit(1).
+    """
     try:
         app_config = load()
-    except (ConfigurationError, FileNotFoundError):
-        raise _StartupExit(1)
+    except (ConfigurationError, FileNotFoundError) as err:
+        raise _StartupExit(1) from err
 
     try:
         dist_dir = resolve_dist_dir()
-    except FileNotFoundError:
-        raise _StartupExit(1)
+    except FileNotFoundError as err:
+        raise _StartupExit(1) from err
 
     if not (dist_dir / "index.html").exists():
         raise _StartupExit(1)
@@ -74,8 +77,8 @@ def _startup() -> tuple:
             confidence_threshold=app_config.model.confidence_threshold,
             labels_path=app_config.model.labels_path,
         )
-    except (ConfigurationError, OperationError):
-        raise _StartupExit(1)
+    except (ConfigurationError, OperationError) as err:
+        raise _StartupExit(1) from err
 
     initial_config = RuntimeConfig(
         camera=LocalCameraConfig(
@@ -92,9 +95,9 @@ def _startup() -> tuple:
 
     try:
         pipeline.start()
-    except Exception:
+    except Exception as err:
         pipeline.stop()
-        raise _StartupExit(1)
+        raise _StartupExit(1) from err
 
     return engine, pipeline
 
@@ -121,14 +124,16 @@ def create_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
-    async def _validation_handler(request, exc):
+    async def _validation_handler(request: Request, exc: RequestValidationError) -> Response:  # type: ignore[type-arg]
         for error in exc.errors():
             if error.get("type") == "json_invalid":
                 return Response(status_code=400)
         return await request_validation_exception_handler(request, exc)
 
     @app.exception_handler(Exception)
-    async def _unhandled_exception_handler(request, exc):
+    async def _unhandled_exception_handler(  # pylint: disable=unused-argument
+        request: Request, exc: Exception  # type: ignore[type-arg]
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=500,
             content={"detail": "Internal Server Error"},
@@ -150,7 +155,7 @@ def create_app() -> FastAPI:
     index_html = dist_dir / "index.html"
 
     @app.get("/", include_in_schema=False)
-    async def _root():
+    async def _root() -> Response:
         content = index_html.read_bytes()
         etag = f'"{hashlib.md5(content).hexdigest()}"'
         return Response(

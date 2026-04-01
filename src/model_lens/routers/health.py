@@ -21,4 +21,5 @@ router = APIRouter()
 
 @router.get("/healthz")
 async def healthz() -> Response:
+    """Return 200 OK if the service is running."""
     return Response(status_code=200)

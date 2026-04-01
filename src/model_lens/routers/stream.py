@@ -15,11 +15,15 @@
 
 import base64
 import json
+import queue
 import time
 from collections.abc import Generator
+from typing import cast
 
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
+
+from model_lens.detection_pipeline import DetectionPipeline
 
 router = APIRouter()
 
@@ -31,13 +35,18 @@ _QUEUE_TIMEOUT = 1.0
 _monotonic = time.monotonic
 
 
-def _event_generator(pipeline) -> Generator[bytes, None, None]:
+def _event_generator(pipeline: DetectionPipeline) -> Generator[bytes, None, None]:
     last_frame_time = _monotonic()
     last_keepalive_time = last_frame_time
 
     try:
         while True:
-            result = pipeline.get_queue(timeout=_QUEUE_TIMEOUT)
+            # get detection result
+            try:
+                result = pipeline.get_queue().get(timeout=_QUEUE_TIMEOUT)
+            except queue.Empty:
+                result = None
+
             now = _monotonic()
 
             if result is not None:
@@ -71,8 +80,9 @@ def _event_generator(pipeline) -> Generator[bytes, None, None]:
 
 
 @router.get("/stream")
-async def stream(request: Request) -> StreamingResponse:
-    pipeline = request.app.state.pipeline
+async def stream(request: Request) -> StreamingResponse:  # type: ignore[type-arg]
+    """Stream detection frames as Server-Sent Events."""
+    pipeline = cast(DetectionPipeline, request.app.state.pipeline)
     return StreamingResponse(
         _event_generator(pipeline),
         media_type="text/event-stream",
