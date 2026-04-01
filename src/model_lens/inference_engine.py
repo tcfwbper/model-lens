@@ -109,6 +109,15 @@ class InferenceEngine(abc.ABC):
     ) -> list[DetectionResult]:
         """Run inference on a single BGR frame and return filtered detections."""
 
+    @abc.abstractmethod
+    def teardown(self) -> None:
+        """Release all resources held by the engine.
+
+        After this method returns the engine is inert; any call to
+        :meth:`detect` will raise :exc:`OperationError`.  Calling
+        ``teardown()`` more than once is safe (subsequent calls are no-ops).
+        """
+
 
 class TorchInferenceEngine(InferenceEngine):
     """Concrete inference engine backend using PyTorch (``.pt`` model files)."""
@@ -135,6 +144,7 @@ class TorchInferenceEngine(InferenceEngine):
 
         self._confidence_threshold: float = confidence_threshold
         self._lock: threading.Lock = threading.Lock()
+        self._torn_down: bool = False
         self._model = self._load_model(resolved_model)
 
     @classmethod
@@ -170,6 +180,9 @@ class TorchInferenceEngine(InferenceEngine):
     ) -> list[DetectionResult]:
         """Run inference on a single BGR frame and return filtered detections."""
         with self._lock:
+            if self._torn_down:
+                raise OperationError("detect() called on a torn-down InferenceEngine instance")
+
             rgb_frame = frame[:, :, ::-1].copy()
 
             try:
@@ -207,6 +220,20 @@ class TorchInferenceEngine(InferenceEngine):
 
             results.sort(key=lambda r: r.confidence, reverse=True)
             return results
+
+    def teardown(self) -> None:
+        """Release the model and label map held by this engine.
+
+        Idempotent: subsequent calls after the first are silent no-ops.
+        Thread-safe: acquires the per-instance lock before clearing state.
+        """
+        with self._lock:
+            if self._torn_down:
+                return
+            self._torn_down = True
+            self._model = None
+            self._label_map.clear()
+        logger.info("TorchInferenceEngine torn down; model and label map released.")
 
 
 ENGINE_REGISTRY: dict[str, type[InferenceEngine]] = {

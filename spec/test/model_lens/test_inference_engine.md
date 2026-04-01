@@ -187,6 +187,35 @@ from model_lens.inference_engine import TorchInferenceEngine
 
 ---
 
+---
+
+## 7. `TorchInferenceEngine.teardown()` — Resource Release
+
+> All tests construct a `TorchInferenceEngine` via the shared `engine_with_mock_model` fixture
+> unless stated otherwise.
+
+### 7.1 Happy Path
+
+| Test ID | Category | Description | Expected |
+|---|---|---|---|
+| `test_teardown_sets_model_to_none` | `unit` | After `teardown()`, the internal `_model` attribute is `None` | `engine._model is None` |
+| `test_teardown_clears_label_map` | `unit` | After `teardown()`, the internal `_label_map` is empty | `engine._label_map == {}` |
+| `test_teardown_is_idempotent` | `unit` | Calling `teardown()` twice does not raise | Second call completes without exception |
+
+### 7.2 Post-Teardown Behaviour
+
+| Test ID | Category | Description | Expected |
+|---|---|---|---|
+| `test_detect_after_teardown_raises_operation_error` | `unit` | `detect()` called after `teardown()` raises `OperationError` | `raises OperationError` |
+
+### 7.3 Thread Safety (Simulated)
+
+| Test ID | Category | Description | Expected |
+|---|---|---|---|
+| `test_teardown_acquires_lock` | `race` | `teardown()` acquires (and releases) the per-instance lock | Patch the engine's `_lock` with a `MagicMock`; call `teardown()`; assert `lock.__enter__` was called once |
+
+---
+
 ## Summary Table
 
 | Entity | Test Count (approx.) | unit | e2e | race | Key Concerns |
@@ -200,3 +229,4 @@ from model_lens.inference_engine import TorchInferenceEngine
 | `TorchInferenceEngine.detect()` (ordering) | 2 | 2 | 0 | 0 | descending order, equal confidence both present |
 | `TorchInferenceEngine.detect()` (error propagation) | 2 | 2 | 0 | 0 | unknown index → ParseError, runtime failure → OperationError |
 | `TorchInferenceEngine.detect()` (thread safety) | 2 | 0 | 0 | 2 | lock acquired on success, lock acquired on exception |
+| `TorchInferenceEngine.teardown()` | 5 | 4 | 0 | 1 | model cleared, label map cleared, idempotent, detect-after-teardown → OperationError, lock acquired |

@@ -30,6 +30,7 @@ defines the full public contract; concrete subclasses implement it independently
 - Own the label map: load it from `labels_path` at construction time and expose it as an internal
   lookup table for use by subclasses.
 - Declare `detect()` as the sole public inference method.
+- Declare `teardown()` as the public resource-release method.
 
 ### Abstract Method: `detect()`
 
@@ -79,6 +80,29 @@ than or equal to `confidence_threshold`. The list is ordered by descending confi
 - `is_target` is computed inside `detect()` by checking `label in target_labels`.
 - BGR→RGB conversion, if required by the backend, is performed inside the concrete subclass
   implementation and must not modify the input `frame` array.
+
+### Abstract Method: `teardown()`
+
+```python
+@abstractmethod
+def teardown(self) -> None:
+    ...
+```
+
+Releases all resources held by the engine instance. After `teardown()` returns, the engine is
+consider inert: any subsequent call to `detect()` must raise `OperationError`.
+
+#### Rules
+
+- `teardown()` is **idempotent**: calling it more than once must not raise and must not cause
+  undefined behaviour (the second and subsequent calls silently do nothing).
+- `teardown()` is **thread-safe**; it acquires the same per-instance lock used by `detect()` before
+  clearing any internal state, ensuring no concurrent `detect()` call observes a partially torn-down
+  state.
+- `detect()` must raise `OperationError` (not expose an `AttributeError` or other language-level
+  error) if called after `teardown()` has completed.
+
+---
 
 ### Label Map Loading
 
@@ -185,6 +209,8 @@ found.
 
 - The method acquires the per-instance lock at entry and releases it before returning (including
   on exception paths), ensuring thread safety.
+- At the start of each call (inside the lock), the method must check whether `teardown()` has
+  already been called; if so, it must raise `OperationError` immediately.
 - If the model requires RGB input, the subclass must convert the BGR `frame` to RGB internally
   using a copy (e.g., `frame[:, :, ::-1].copy()`); the original `frame` array must not be modified.
 - Raw integer output indices from the model are translated to label strings via the label map
@@ -195,6 +221,17 @@ found.
   `confidence_threshold` are **kept**.
 - `is_target` is set by evaluating `label in target_labels` for each surviving detection.
 - The returned list is ordered by descending `confidence`.
+
+### `teardown()` Implementation Notes
+
+- The method acquires the per-instance lock before clearing any state, so it cannot interleave
+  with an in-progress `detect()` call.
+- Inside the lock, the method checks whether the engine is already torn down (idempotency guard);
+  if so it returns immediately without logging or mutating state.
+- On the first call, the method sets an internal `_torn_down` flag, clears `_label_map`, and
+  releases the reference to the loaded model (sets `_model` to `None`) so the garbage collector
+  can reclaim GPU/CPU memory.
+- A log message at `INFO` level is emitted after the resources are released.
 
 ---
 
@@ -208,7 +245,7 @@ TorchInferenceEngine.__init__()
     ├── resolve model_path  (package-data fallback if empty; raises ConfigurationError if unresolvable)
     ├── resolve labels_path (package-data fallback if empty; raises ConfigurationError if unresolvable)
     ├── load label map      (base class, raises ConfigurationError / ParseError)
-    ├── initialise per-instance threading.Lock
+    ├── initialise per-instance threading.Lock and _torn_down flag
     └── load .pt model      (raises ConfigurationError / OperationError)
     │
     ▼
@@ -216,8 +253,14 @@ Detection Pipeline loop (may be called from multiple threads)
     │
     ├── frame = CameraCapture.read()
     ├── results = engine.detect(frame.data, runtime_config.target_labels)
-    │       └── acquires lock → runs inference → releases lock
+    │       └── acquires lock → checks _torn_down → runs inference → releases lock
     └── publish (frame, results) → SSE queue
+    │
+    ▼
+Server shutdown
+    │
+    └── engine.teardown()
+            └── acquires lock → sets _torn_down → clears _label_map → sets _model = None → releases lock
 ```
 
 The engine instance is created once at startup and reused for the lifetime of the server process.
@@ -238,6 +281,7 @@ are fixed at startup per `spec/configuration.md`).
 | Model file corrupt / incompatible | `OperationError` | `TorchInferenceEngine.__init__()` |
 | Raw output index not in label map | `ParseError` | `TorchInferenceEngine.detect()` |
 | PyTorch inference call fails at runtime | `OperationError` | `TorchInferenceEngine.detect()` |
+| `detect()` called after `teardown()` | `OperationError` | `TorchInferenceEngine.detect()` |
 | Invalid `confidence_threshold` value | `ConfigurationError` | `TorchInferenceEngine.__init__()` |
 
 All exceptions are subtypes of `ModelLensError` as defined in `spec/errors.md`.
@@ -255,3 +299,5 @@ All exceptions are subtypes of `ModelLensError` as defined in `spec/errors.md`.
 - The engine does **not** manage camera lifecycle or frame acquisition.
 - `ENGINE_REGISTRY` does not support dynamic plugin loading; all backends must be imported at
   startup.
+- After `teardown()` is called, the engine cannot be re-used; there is no `reinitialise()` or
+  equivalent. A new instance must be constructed if inference is needed again.

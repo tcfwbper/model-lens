@@ -614,3 +614,52 @@ class TestDetectThreadSafety:
             engine_with_mock_model.detect(frame, target_labels=[])
 
         mock_lock.__enter__.assert_called_once()
+
+
+# ===========================================================================
+# Section 7 — teardown()
+# ===========================================================================
+
+
+class TestTeardown:
+    """7.1, 7.2, 7.3 — teardown() resource release, post-teardown behaviour, thread safety."""
+
+    @pytest.mark.unit
+    def test_teardown_sets_model_to_none(self, engine_with_mock_model: TorchInferenceEngine) -> None:
+        """After teardown(), the internal _model attribute is None."""
+        engine_with_mock_model.teardown()
+        assert engine_with_mock_model._model is None  # type: ignore[attr-defined]
+
+    @pytest.mark.unit
+    def test_teardown_clears_label_map(self, engine_with_mock_model: TorchInferenceEngine) -> None:
+        """After teardown(), the internal _label_map is empty."""
+        engine_with_mock_model.teardown()
+        assert engine_with_mock_model._label_map == {}  # type: ignore[attr-defined]
+
+    @pytest.mark.unit
+    def test_teardown_is_idempotent(self, engine_with_mock_model: TorchInferenceEngine) -> None:
+        """Calling teardown() twice does not raise."""
+        engine_with_mock_model.teardown()
+        engine_with_mock_model.teardown()  # must not raise
+
+    @pytest.mark.unit
+    def test_detect_after_teardown_raises_operation_error(
+        self, engine_with_mock_model: TorchInferenceEngine
+    ) -> None:
+        """detect() called after teardown() raises OperationError."""
+        engine_with_mock_model.teardown()
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        with pytest.raises(OperationError):
+            engine_with_mock_model.detect(frame, target_labels=[])
+
+    @pytest.mark.race
+    def test_teardown_acquires_lock(self, engine_with_mock_model: TorchInferenceEngine) -> None:
+        """teardown() acquires (and releases) the per-instance lock."""
+        mock_lock = MagicMock()
+        mock_lock.__enter__ = MagicMock(return_value=None)
+        mock_lock.__exit__ = MagicMock(return_value=False)
+        engine_with_mock_model._lock = mock_lock  # type: ignore[attr-defined]
+
+        engine_with_mock_model.teardown()
+
+        mock_lock.__enter__.assert_called_once()
