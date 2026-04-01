@@ -145,7 +145,7 @@ class TorchInferenceEngine(InferenceEngine):
         self._confidence_threshold: float = confidence_threshold
         self._lock: threading.Lock = threading.Lock()
         self._torn_down: bool = False
-        self._model = self._load_model(resolved_model)
+        self._model: nn.Module | None = self._load_model(resolved_model)
 
     @classmethod
     def _resolve_path(cls, user_path: str, default_filename: str, param_name: str) -> str:
@@ -186,6 +186,8 @@ class TorchInferenceEngine(InferenceEngine):
             rgb_frame = frame[:, :, ::-1].copy()
 
             try:
+                if self._model is None:
+                    raise OperationError("Inference model is not loaded")
                 raw_results = self._model(rgb_frame)
             except Exception as exc:
                 raise OperationError(f"Inference call failed: {exc}") from exc

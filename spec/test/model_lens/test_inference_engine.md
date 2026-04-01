@@ -169,6 +169,7 @@ from model_lens.inference_engine import TorchInferenceEngine
 |---|---|---|---|---|
 | `test_detect_unknown_label_index_raises_parse_error` | `unit` | A raw model output index with no entry in the label map raises `ParseError` | Mock returns detection with index `999`; label map has only indices `0`–2 | raises `ParseError` |
 | `test_detect_inference_runtime_failure_raises_operation_error` | `unit` | An unexpected exception from the model's `__call__` raises `OperationError` | Mock model `__call__` raises `RuntimeError` | raises `OperationError` |
+| `test_detect_inference_with_no_nn_module_raises_operation_error` | `unit` | Try inferencing while `_model` attribute is `None` | Mock `_model` attribute is `None` and call `detect()` | raises `OperationError` |
 
 ---
 
@@ -227,6 +228,6 @@ from model_lens.inference_engine import TorchInferenceEngine
 | `TorchInferenceEngine.detect()` (happy path) | 7 | 7 | 0 | 0 | return type, empty result, field correctness, is_target true/false, frame not mutated, target_labels not mutated |
 | `TorchInferenceEngine.detect()` (threshold filtering) | 3 | 3 | 0 | 0 | below, at, above threshold |
 | `TorchInferenceEngine.detect()` (ordering) | 2 | 2 | 0 | 0 | descending order, equal confidence both present |
-| `TorchInferenceEngine.detect()` (error propagation) | 2 | 2 | 0 | 0 | unknown index → ParseError, runtime failure → OperationError |
+| `TorchInferenceEngine.detect()` (error propagation) | 3 | 3 | 0 | 0 | unknown index → ParseError, runtime failure → OperationError |
 | `TorchInferenceEngine.detect()` (thread safety) | 2 | 0 | 0 | 2 | lock acquired on success, lock acquired on exception |
 | `TorchInferenceEngine.teardown()` | 5 | 4 | 0 | 1 | model cleared, label map cleared, idempotent, detect-after-teardown → OperationError, lock acquired |

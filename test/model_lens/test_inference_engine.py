@@ -576,7 +576,17 @@ class TestDetectErrorPropagation:
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         with pytest.raises(OperationError):
             engine_with_mock_model.detect(frame, target_labels=[])
-
+    
+    @pytest.mark.unit
+    def test_detect_inference_with_no_nn_module_raises_operation_error(
+        self,
+        engine_with_mock_model: TorchInferenceEngine,
+    ) -> None:
+        """If the loaded model is not a valid nn.Module, detect() raises OperationError."""
+        engine_with_mock_model._model = None
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        with pytest.raises(OperationError):
+            engine_with_mock_model.detect(frame, target_labels=[])
 
 # ===========================================================================
 # Section 6 — detect() Thread Safety (Simulated)
