@@ -13,15 +13,24 @@
 # limitations under the License.
 """FastAPI application factory for ModelLens."""
 
+import hashlib
 import importlib.resources
+import sys
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from model_lens.config import load
+from model_lens.detection_pipeline import DetectionPipeline
+from model_lens.entities import LocalCameraConfig, RuntimeConfig
+from model_lens.exceptions import ConfigurationError, OperationError
+from model_lens.inference_engine import TorchInferenceEngine
 from model_lens.routers import config, health, stream
 
 
@@ -31,9 +40,85 @@ def resolve_dist_dir() -> Path:
     return Path(str(pkg)) / "dist"
 
 
+def get_pipeline(request: Request) -> object:
+    """Return the pipeline instance from app state."""
+    return request.app.state.pipeline
+
+
+class _StartupExit(SystemExit, Exception):
+    """SystemExit subclass that also inherits from Exception.
+
+    This ensures the exit propagates cleanly through anyio's task groups
+    instead of being wrapped in a BaseExceptionGroup.
+    """
+
+
+def _startup() -> tuple:
+    """Run synchronous startup logic. Returns (engine, pipeline) or raises _StartupExit(1)."""
+    try:
+        app_config = load()
+    except (ConfigurationError, FileNotFoundError):
+        raise _StartupExit(1)
+
+    try:
+        dist_dir = resolve_dist_dir()
+    except FileNotFoundError:
+        raise _StartupExit(1)
+
+    if not (dist_dir / "index.html").exists():
+        raise _StartupExit(1)
+
+    try:
+        engine = TorchInferenceEngine(
+            model_path=app_config.model.model_path,
+            confidence_threshold=app_config.model.confidence_threshold,
+            labels_path=app_config.model.labels_path,
+        )
+    except (ConfigurationError, OperationError):
+        raise _StartupExit(1)
+
+    initial_config = RuntimeConfig(
+        camera=LocalCameraConfig(
+            device_index=app_config.camera.device_index,
+        ),
+        target_labels=[],
+        confidence_threshold=app_config.model.confidence_threshold,
+    )
+
+    pipeline = DetectionPipeline(
+        engine=engine,
+        initial_config=initial_config,
+    )
+
+    try:
+        pipeline.start()
+    except Exception:
+        pipeline.stop()
+        raise _StartupExit(1)
+
+    return engine, pipeline
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Manage application startup and shutdown."""
+    # If pipeline is already set (e.g. by tests), skip startup/shutdown.
+    if hasattr(app.state, "pipeline"):
+        yield
+        return
+
+    engine, pipeline = _startup()
+    app.state.pipeline = pipeline
+    try:
+        yield
+    finally:
+        pipeline.stop()
+        engine.teardown()
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
-    app = FastAPI()
+    app = FastAPI(lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_handler(request, exc):
@@ -42,19 +127,36 @@ def create_app() -> FastAPI:
                 return Response(status_code=400)
         return await request_validation_exception_handler(request, exc)
 
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(request, exc):
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error"},
+        )
+
     app.include_router(health.router)
     app.include_router(config.router)
     app.include_router(stream.router)
 
-    dist_dir = resolve_dist_dir()
+    try:
+        dist_dir = resolve_dist_dir()
+    except FileNotFoundError:
+        return app
+
     static_dir = dist_dir / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     index_html = dist_dir / "index.html"
 
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def _spa_fallback(full_path: str):
-        return FileResponse(str(index_html))
+    @app.get("/", include_in_schema=False)
+    async def _root():
+        content = index_html.read_bytes()
+        etag = f'"{hashlib.md5(content).hexdigest()}"'
+        return Response(
+            content=content,
+            media_type="text/html",
+            headers={"etag": etag},
+        )
 
     return app
