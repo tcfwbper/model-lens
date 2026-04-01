@@ -12,7 +12,8 @@
 
 ```python
 import hashlib
-import sys
+import importlib.resources
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -116,6 +117,7 @@ def static_client(mock_pipeline, tmp_path):
 | `test_root_etag_header_present` | `unit` | Response includes an `ETag` header | `GET /` | `"etag"` in `response.headers` |
 | `test_root_etag_is_md5_of_content` | `unit` | `ETag` value is the MD5 hex digest of `index.html` bytes, quoted | `GET /` | `response.headers["etag"] == f'"{hashlib.md5(index_content).hexdigest()}"'` |
 | `test_root_etag_is_quoted_string` | `unit` | `ETag` value is wrapped in double quotes per HTTP spec | `GET /` | `response.headers["etag"].startswith('"')` and `response.headers["etag"].endswith('"')` |
+| `test_resolve_dist_dir_returns_package_dist_path` | `unit` | `resolve_dist_dir()` returns `importlib.resources.files("model_lens") / "dist"` | `resolve_dist_dir() == Path(str(importlib.resources.files("model_lens"))) / "dist"` |
 
 ### 1.2 Happy Path — GET /static/{path}
 
@@ -277,7 +279,7 @@ def client_with_broken_pipeline(mock_pipeline, tmp_path):
 
 | Entity | Test Count (approx.) | unit | e2e | race | Key Concerns |
 |---|---|---|---|---|---|
-| Static assets | 9 | 9 | 0 | 0 | `index.html` body, ETag MD5, quoted ETag, static files, 404 |
+| Static assets | 10 | 10 | 0 | 0 | `index.html` body, ETag MD5, quoted ETag, static files, 404 |
 | Dependency injection | 3 | 3 | 0 | 0 | `get_pipeline` returns correct instance, used by router, stream router calls `get_queue()` not `get_result_queue()` |
 | Lifespan startup/shutdown | 15 | 15 | 0 | 0 | construction order, AppConfig→RuntimeConfig mapping, `start`/`stop`/`teardown` calls, error propagation |
 | Error handling (HTTP 500) | 3 | 3 | 0 | 0 | unhandled exception → 500, JSON body, `detail` key present |

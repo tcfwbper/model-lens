@@ -15,8 +15,8 @@
 """Tests for model_lens.app."""
 
 import hashlib
-import queue
-import sys
+import importlib.resources
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -177,7 +177,12 @@ class TestStaticAssetsRoot:
         etag = response.headers["etag"]
         assert etag.startswith('"')
         assert etag.endswith('"')
+    
+    def test_resolve_dist_dir_returns_package_dist_path(self):
+        from model_lens.app import resolve_dist_dir
 
+        expected = Path(str(importlib.resources.files("model_lens"))) / "dist"
+        assert resolve_dist_dir() == expected
 
 class TestStaticAssetsFiles:
     """Tests for GET /static/{path}."""
@@ -261,7 +266,11 @@ class TestDependencyInjection:
 
         mock_pipeline.get_queue.side_effect = get_queue_side_effect
 
-        with client.stream("GET", "/stream") as response:
+        with (
+            patch("model_lens.routers.stream._IDLE_TIMEOUT", 0.0),
+            patch("model_lens.routers.stream._QUEUE_TIMEOUT", 0.0),
+            client.stream("GET", "/stream") as response,
+        ):
             # Consume at least one chunk to trigger the get_queue call
             for chunk in response.iter_bytes():
                 if chunk.startswith(b"data: "):
