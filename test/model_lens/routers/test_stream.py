@@ -109,14 +109,17 @@ class TestStreamEventPayload:
 
         mock_pipeline.get_queue.side_effect = get_queue_side_effect
 
+    @pytest.mark.unit
     def test_stream_returns_200(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             assert response.status_code == 200
 
+    @pytest.mark.unit
     def test_stream_content_type_is_text_event_stream(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             assert "text/event-stream" in response.headers["content-type"]
 
+    @pytest.mark.unit
     def test_stream_event_contains_jpeg_b64(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -128,6 +131,7 @@ class TestStreamEventPayload:
                     return
         pytest.fail("No SSE data event received")
 
+    @pytest.mark.unit
     def test_stream_event_jpeg_b64_is_valid_base64(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -137,6 +141,7 @@ class TestStreamEventPayload:
                     return
         pytest.fail("No SSE data event received")
 
+    @pytest.mark.unit
     def test_stream_event_jpeg_b64_decodes_to_original_bytes(
         self, client: TestClient
     ):
@@ -149,6 +154,7 @@ class TestStreamEventPayload:
                     return
         pytest.fail("No SSE data event received")
 
+    @pytest.mark.unit
     def test_stream_event_contains_timestamp(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -158,6 +164,7 @@ class TestStreamEventPayload:
                     return
         pytest.fail("No SSE data event received")
 
+    @pytest.mark.unit
     def test_stream_event_contains_source(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -167,6 +174,7 @@ class TestStreamEventPayload:
                     return
         pytest.fail("No SSE data event received")
 
+    @pytest.mark.unit
     def test_stream_event_contains_detections(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -176,6 +184,7 @@ class TestStreamEventPayload:
                     return
         pytest.fail("No SSE data event received")
 
+    @pytest.mark.unit
     def test_stream_event_detection_label(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -185,6 +194,7 @@ class TestStreamEventPayload:
                     return
         pytest.fail("No SSE data event received")
 
+    @pytest.mark.unit
     def test_stream_event_detection_confidence(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -194,6 +204,7 @@ class TestStreamEventPayload:
                     return
         pytest.fail("No SSE data event received")
 
+    @pytest.mark.unit
     def test_stream_event_detection_bounding_box(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -212,6 +223,7 @@ class TestStreamEventPayload:
 class TestStreamEventDetectionIsTarget:
     """Tests for detection is_target field."""
 
+    @pytest.mark.unit
     def test_stream_event_detection_is_target_true(
         self, client: TestClient, mock_pipeline, make_pipeline_result
     ):
@@ -235,6 +247,7 @@ class TestStreamEventDetectionIsTarget:
                     return
         pytest.fail("No SSE data event received")
 
+    @pytest.mark.unit
     def test_stream_event_detection_is_target_false(
         self, client: TestClient, mock_pipeline, make_pipeline_result
     ):
@@ -262,6 +275,7 @@ class TestStreamEventDetectionIsTarget:
 class TestStreamEventEmptyDetections:
     """Test for empty detections array."""
 
+    @pytest.mark.unit
     def test_stream_event_empty_detections(
         self, client: TestClient, mock_pipeline
     ):
@@ -308,6 +322,7 @@ class TestStreamEventFormat:
 
         mock_pipeline.get_queue.side_effect = get_queue_side_effect
 
+    @pytest.mark.unit
     def test_stream_event_line_format(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -316,6 +331,7 @@ class TestStreamEventFormat:
                     return
         pytest.fail("No SSE data event received")
 
+    @pytest.mark.unit
     def test_stream_event_ends_with_double_newline(self, client: TestClient):
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -343,6 +359,7 @@ class TestStreamKeepalive:
         monkeypatch.setattr("model_lens.routers.stream._KEEPALIVE_INTERVAL", 30.0)
         monkeypatch.setattr("model_lens.routers.stream._QUEUE_TIMEOUT", 0.0)
 
+    @pytest.mark.unit
     def test_stream_keepalive_sent_when_queue_empty(
         self, client: TestClient, mock_pipeline
     ):
@@ -357,6 +374,7 @@ class TestStreamKeepalive:
                         return
         pytest.fail("No keepalive received")
 
+    @pytest.mark.unit
     def test_stream_keepalive_format(
         self, client: TestClient, mock_pipeline
     ):
@@ -389,6 +407,7 @@ class TestStreamIdleTimeout:
         monkeypatch.setattr("model_lens.routers.stream._KEEPALIVE_INTERVAL", 30.0)
         monkeypatch.setattr("model_lens.routers.stream._QUEUE_TIMEOUT", 0.0)
 
+    @pytest.mark.unit
     def test_stream_idle_timeout_closes_connection(
         self, client: TestClient, mock_pipeline
     ):
@@ -401,6 +420,7 @@ class TestStreamIdleTimeout:
                 # Stream should have ended (iterator exhausted)
                 assert isinstance(chunks, list)
 
+    @pytest.mark.unit
     def test_stream_idle_timer_resets_on_frame(
         self, client: TestClient, mock_pipeline, make_pipeline_result
     ):
@@ -430,6 +450,7 @@ class TestStreamIdleTimeout:
                 data_chunks = [c for c in chunks if c.startswith(b"data: ")]
                 assert len(data_chunks) >= 1
 
+    @pytest.mark.unit
     def test_stream_keepalive_does_not_reset_idle_timer(
         self, client: TestClient, mock_pipeline
     ):
@@ -457,6 +478,7 @@ class TestStreamIdleTimeout:
 class TestStreamCleanup:
     """Tests for resource cleanup on client disconnect."""
 
+    @pytest.mark.unit
     def test_stream_client_disconnect_does_not_raise(
         self, client: TestClient, mock_pipeline, make_pipeline_result
     ):
@@ -482,6 +504,7 @@ class TestStreamCleanup:
                     break
             response.close()
 
+    @pytest.mark.unit
     def test_stream_generator_exit_does_not_suppress(self, mock_pipeline):
         """gen.close() terminates the generator cleanly and does not raise.
 
@@ -497,6 +520,7 @@ class TestStreamCleanup:
         # Must not raise — GeneratorExit is not converted into another exception.
         gen.close()
 
+    @pytest.mark.unit
     def test_stream_generator_exit_triggers_cleanup(self, mock_pipeline):
         """Calling gen.close() once triggers the finally block exactly once.
 

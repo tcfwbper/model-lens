@@ -145,32 +145,38 @@ def client_with_broken_pipeline(mock_pipeline, tmp_path):
 class TestStaticAssetsRoot:
     """Tests for GET /."""
 
+    @pytest.mark.unit
     def test_root_returns_200(self, static_client):
         client, _ = static_client
         response = client.get("/")
         assert response.status_code == 200
 
+    @pytest.mark.unit
     def test_root_content_type_is_html(self, static_client):
         client, _ = static_client
         response = client.get("/")
         assert "text/html" in response.headers["content-type"]
 
+    @pytest.mark.unit
     def test_root_body_is_index_html(self, static_client):
         client, index_content = static_client
         response = client.get("/")
         assert response.content == index_content
 
+    @pytest.mark.unit
     def test_root_etag_header_present(self, static_client):
         client, _ = static_client
         response = client.get("/")
         assert "etag" in response.headers
 
+    @pytest.mark.unit
     def test_root_etag_is_md5_of_content(self, static_client):
         client, index_content = static_client
         response = client.get("/")
         expected = f'"{hashlib.md5(index_content).hexdigest()}"'
         assert response.headers["etag"] == expected
 
+    @pytest.mark.unit
     def test_root_etag_is_quoted_string(self, static_client):
         client, _ = static_client
         response = client.get("/")
@@ -178,6 +184,7 @@ class TestStaticAssetsRoot:
         assert etag.startswith('"')
         assert etag.endswith('"')
     
+    @pytest.mark.unit
     def test_resolve_dist_dir_returns_package_dist_path(self):
         from model_lens.app import resolve_dist_dir
 
@@ -187,16 +194,19 @@ class TestStaticAssetsRoot:
 class TestStaticAssetsFiles:
     """Tests for GET /static/{path}."""
 
+    @pytest.mark.unit
     def test_static_file_returns_200(self, static_client):
         client, _ = static_client
         response = client.get("/static/app.js")
         assert response.status_code == 200
 
+    @pytest.mark.unit
     def test_static_file_body_matches_content(self, static_client):
         client, _ = static_client
         response = client.get("/static/app.js")
         assert response.content == b"console.log('hello');"
 
+    @pytest.mark.unit
     def test_static_file_not_found_returns_404(self, static_client):
         client, _ = static_client
         response = client.get("/static/nonexistent.js")
@@ -206,6 +216,7 @@ class TestStaticAssetsFiles:
 class TestStaticAssetsValidation:
     """Validation tests for unknown paths."""
 
+    @pytest.mark.unit
     def test_unknown_path_returns_404(self, static_client):
         client, _ = static_client
         response = client.get("/unknown")
@@ -218,6 +229,7 @@ class TestStaticAssetsValidation:
 class TestDependencyInjection:
     """Tests for get_pipeline and get_queue dependency injection."""
 
+    @pytest.mark.unit
     def test_get_pipeline_returns_pipeline_from_app_state(
         self, mock_pipeline, tmp_path
     ):
@@ -239,12 +251,14 @@ class TestDependencyInjection:
         result = get_pipeline(mock_request)
         assert result is mock_pipeline
 
+    @pytest.mark.unit
     def test_get_pipeline_used_by_config_router(
         self, client: TestClient, mock_pipeline
     ):
         client.get("/config")
         assert mock_pipeline.get_config.call_count == 1
 
+    @pytest.mark.unit
     def test_stream_router_calls_get_queue(
         self, client: TestClient, mock_pipeline
     ):
@@ -286,6 +300,7 @@ class TestDependencyInjection:
 class TestLifespanStartup:
     """Tests for lifespan startup sequence."""
 
+    @pytest.mark.unit
     def test_lifespan_inference_engine_constructed(self, lifespan_mocks):
         from model_lens.app import create_app
 
@@ -299,6 +314,7 @@ class TestLifespanStartup:
             labels_path=lifespan_mocks["config"].model.labels_path,
         )
 
+    @pytest.mark.unit
     def test_lifespan_detection_pipeline_constructed(self, lifespan_mocks):
         from model_lens.app import create_app
 
@@ -308,6 +324,7 @@ class TestLifespanStartup:
 
         assert lifespan_mocks["pipeline_cls"].call_count == 1
 
+    @pytest.mark.unit
     def test_lifespan_initial_runtime_config_camera_from_app_config(
         self, lifespan_mocks
     ):
@@ -345,6 +362,7 @@ class TestLifespanStartup:
             == lifespan_mocks["config"].camera.device_index
         )
 
+    @pytest.mark.unit
     def test_lifespan_initial_runtime_config_target_labels_empty(
         self, lifespan_mocks
     ):
@@ -365,6 +383,7 @@ class TestLifespanStartup:
         assert runtime_config is not None
         assert runtime_config.target_labels == []
 
+    @pytest.mark.unit
     def test_lifespan_pipeline_start_called(self, lifespan_mocks):
         from model_lens.app import create_app
 
@@ -374,6 +393,7 @@ class TestLifespanStartup:
 
         assert lifespan_mocks["pipeline"].start.call_count == 1
 
+    @pytest.mark.unit
     def test_lifespan_pipeline_stored_in_app_state(self, lifespan_mocks):
         from model_lens.app import create_app
 
@@ -385,6 +405,7 @@ class TestLifespanStartup:
 class TestLifespanShutdown:
     """Tests for lifespan shutdown sequence."""
 
+    @pytest.mark.unit
     def test_lifespan_pipeline_stop_called_on_shutdown(self, lifespan_mocks):
         from model_lens.app import create_app
 
@@ -394,6 +415,7 @@ class TestLifespanShutdown:
 
         assert lifespan_mocks["pipeline"].stop.call_count == 1
 
+    @pytest.mark.unit
     def test_lifespan_engine_teardown_called_on_shutdown(self, lifespan_mocks):
         from model_lens.app import create_app
 
@@ -403,6 +425,7 @@ class TestLifespanShutdown:
 
         assert lifespan_mocks["engine"].teardown.call_count == 1
 
+    @pytest.mark.unit
     def test_lifespan_engine_teardown_after_pipeline_stop(self, lifespan_mocks):
         from model_lens.app import create_app
 
@@ -424,6 +447,7 @@ class TestLifespanShutdown:
 class TestLifespanErrorPropagation:
     """Tests for lifespan error propagation."""
 
+    @pytest.mark.unit
     def test_lifespan_load_error_exits(self, lifespan_mocks):
         lifespan_mocks["load"].side_effect = ConfigurationError("bad config")
 
@@ -435,6 +459,7 @@ class TestLifespanErrorPropagation:
                 pass
         assert exc_info.value.code == 1
 
+    @pytest.mark.unit
     def test_lifespan_inference_engine_configuration_error_exits(
         self, lifespan_mocks
     ):
@@ -448,6 +473,7 @@ class TestLifespanErrorPropagation:
                 pass
         assert exc_info.value.code == 1
 
+    @pytest.mark.unit
     def test_lifespan_inference_engine_operation_error_exits(self, lifespan_mocks):
         lifespan_mocks["engine_cls"].side_effect = OperationError("load failed")
 
@@ -459,6 +485,7 @@ class TestLifespanErrorPropagation:
                 pass
         assert exc_info.value.code == 1
 
+    @pytest.mark.unit
     def test_lifespan_missing_dist_dir_exits(self, lifespan_mocks):
         with patch(
             "model_lens.app.resolve_dist_dir", side_effect=FileNotFoundError
@@ -471,6 +498,7 @@ class TestLifespanErrorPropagation:
                     pass
             assert exc_info.value.code == 1
 
+    @pytest.mark.unit
     def test_lifespan_missing_index_html_exits(self, lifespan_mocks, tmp_path):
         dist_dir = tmp_path / "dist_no_index"
         dist_dir.mkdir()
@@ -486,6 +514,7 @@ class TestLifespanErrorPropagation:
                     pass
             assert exc_info.value.code == 1
 
+    @pytest.mark.unit
     def test_lifespan_pipeline_stop_called_even_after_startup_failure(
         self, lifespan_mocks
     ):
@@ -507,15 +536,18 @@ class TestLifespanErrorPropagation:
 class TestErrorHandling:
     """Tests for unhandled exception → HTTP 500."""
 
+    @pytest.mark.unit
     def test_unhandled_exception_returns_500(self, client_with_broken_pipeline):
         response = client_with_broken_pipeline.get("/config")
         assert response.status_code == 500
 
+    @pytest.mark.unit
     def test_unhandled_exception_response_is_json(self, client_with_broken_pipeline):
         response = client_with_broken_pipeline.get("/config")
         assert "application/json" in response.headers["content-type"]
         response.json()  # should not raise
 
+    @pytest.mark.unit
     def test_unhandled_exception_response_has_detail_key(
         self, client_with_broken_pipeline
     ):

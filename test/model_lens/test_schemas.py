@@ -31,14 +31,17 @@ from model_lens.schemas import (
 class TestLocalCameraRequest:
     """Tests for LocalCameraRequest."""
 
+    @pytest.mark.unit
     def test_local_camera_request_default_device_index(self):
         instance = LocalCameraRequest(source_type="local")
         assert instance.device_index == 0
 
+    @pytest.mark.unit
     def test_local_camera_request_explicit_device_index(self):
         instance = LocalCameraRequest(source_type="local", device_index=3)
         assert instance.device_index == 3
 
+    @pytest.mark.unit
     def test_local_camera_request_negative_device_index_raises(self):
         with pytest.raises(pydantic.ValidationError):
             LocalCameraRequest(source_type="local", device_index=-1)
@@ -50,14 +53,17 @@ class TestLocalCameraRequest:
 class TestRtspCameraRequest:
     """Tests for RtspCameraRequest."""
 
+    @pytest.mark.unit
     def test_rtsp_camera_request_stores_url(self):
         instance = RtspCameraRequest(source_type="rtsp", rtsp_url="rtsp://x")
         assert instance.rtsp_url == "rtsp://x"
 
+    @pytest.mark.unit
     def test_rtsp_camera_request_wrong_scheme_raises(self):
         with pytest.raises(pydantic.ValidationError):
             RtspCameraRequest(source_type="rtsp", rtsp_url="http://x")
 
+    @pytest.mark.unit
     def test_rtsp_camera_request_empty_url_raises(self):
         with pytest.raises(pydantic.ValidationError):
             RtspCameraRequest(source_type="rtsp", rtsp_url="")
@@ -69,18 +75,21 @@ class TestRtspCameraRequest:
 class TestUpdateCameraRequest:
     """Tests for UpdateCameraRequest discriminated union."""
 
+    @pytest.mark.unit
     def test_update_camera_request_local_discriminated(self):
         instance = UpdateCameraRequest(
             camera={"source_type": "local", "device_index": 0}
         )
         assert isinstance(instance.camera, LocalCameraRequest)
 
+    @pytest.mark.unit
     def test_update_camera_request_rtsp_discriminated(self):
         instance = UpdateCameraRequest(
             camera={"source_type": "rtsp", "rtsp_url": "rtsp://x"}
         )
         assert isinstance(instance.camera, RtspCameraRequest)
 
+    @pytest.mark.unit
     def test_update_camera_request_unknown_source_type_raises(self):
         with pytest.raises(pydantic.ValidationError):
             UpdateCameraRequest(camera={"source_type": "usb"})
@@ -92,22 +101,27 @@ class TestUpdateCameraRequest:
 class TestUpdateLabelsRequest:
     """Tests for UpdateLabelsRequest."""
 
+    @pytest.mark.unit
     def test_update_labels_request_stores_labels(self):
         instance = UpdateLabelsRequest(target_labels=["cat", "dog"])
         assert instance.target_labels == ["cat", "dog"]
 
+    @pytest.mark.unit
     def test_update_labels_request_empty_list_valid(self):
         instance = UpdateLabelsRequest(target_labels=[])
         assert instance.target_labels == []
 
+    @pytest.mark.unit
     def test_update_labels_request_missing_field_raises(self):
         with pytest.raises(pydantic.ValidationError):
             UpdateLabelsRequest()
 
+    @pytest.mark.unit
     def test_update_labels_request_non_array_raises(self):
         with pytest.raises(pydantic.ValidationError):
             UpdateLabelsRequest(target_labels="cat")
 
+    @pytest.mark.unit
     def test_update_labels_request_non_string_elements_raises(self):
         with pytest.raises(pydantic.ValidationError):
             UpdateLabelsRequest(target_labels=[1, 2])

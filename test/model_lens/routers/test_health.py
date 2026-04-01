@@ -21,10 +21,12 @@ from fastapi.testclient import TestClient
 class TestHealthz:
     """Tests for GET /healthz."""
 
+    @pytest.mark.unit
     def test_healthz_returns_200(self, client: TestClient):
         response = client.get("/healthz")
         assert response.status_code == 200
 
+    @pytest.mark.unit
     def test_healthz_returns_empty_body(self, client: TestClient):
         response = client.get("/healthz")
         assert response.content == b""

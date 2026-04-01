@@ -30,30 +30,37 @@ from model_lens.entities import (
 class TestGetConfigLocal:
     """Tests for GET /config with local camera (default)."""
 
+    @pytest.mark.unit
     def test_get_config_returns_200(self, client: TestClient):
         response = client.get("/config")
         assert response.status_code == 200
 
+    @pytest.mark.unit
     def test_get_config_local_source_type(self, client: TestClient):
         body = client.get("/config").json()
         assert body["camera"]["source_type"] == "local"
 
+    @pytest.mark.unit
     def test_get_config_local_device_index(self, client: TestClient):
         body = client.get("/config").json()
         assert body["camera"]["device_index"] == 0
 
+    @pytest.mark.unit
     def test_get_config_local_no_rtsp_url(self, client: TestClient):
         body = client.get("/config").json()
         assert "rtsp_url" not in body["camera"]
 
+    @pytest.mark.unit
     def test_get_config_confidence_threshold(self, client: TestClient):
         body = client.get("/config").json()
         assert body["confidence_threshold"] == 0.5
 
+    @pytest.mark.unit
     def test_get_config_target_labels_empty(self, client: TestClient):
         body = client.get("/config").json()
         assert body["target_labels"] == []
 
+    @pytest.mark.unit
     def test_get_config_target_labels_non_empty(
         self, client: TestClient, mock_pipeline
     ):
@@ -80,14 +87,17 @@ class TestGetConfigRtsp:
             confidence_threshold=0.5,
         )
 
+    @pytest.mark.unit
     def test_get_config_rtsp_source_type(self, client: TestClient):
         body = client.get("/config").json()
         assert body["camera"]["source_type"] == "rtsp"
 
+    @pytest.mark.unit
     def test_get_config_rtsp_url(self, client: TestClient):
         body = client.get("/config").json()
         assert body["camera"]["rtsp_url"] == "rtsp://192.168.1.10/stream"
 
+    @pytest.mark.unit
     def test_get_config_rtsp_no_device_index(self, client: TestClient):
         body = client.get("/config").json()
         assert "device_index" not in body["camera"]
@@ -99,6 +109,7 @@ class TestGetConfigRtsp:
 class TestPutCameraLocal:
     """Tests for PUT /config/camera with local camera."""
 
+    @pytest.mark.unit
     def test_put_camera_local_returns_200(self, client: TestClient):
         response = client.put(
             "/config/camera",
@@ -106,6 +117,7 @@ class TestPutCameraLocal:
         )
         assert response.status_code == 200
 
+    @pytest.mark.unit
     def test_put_camera_local_calls_update_config(
         self, client: TestClient, mock_pipeline
     ):
@@ -115,6 +127,7 @@ class TestPutCameraLocal:
         )
         assert mock_pipeline.update_config.call_count == 1
 
+    @pytest.mark.unit
     def test_put_camera_local_update_config_receives_runtime_config(
         self, client: TestClient, mock_pipeline
     ):
@@ -126,6 +139,7 @@ class TestPutCameraLocal:
         assert isinstance(config, RuntimeConfig)
         assert config.camera.device_index == 2
 
+    @pytest.mark.unit
     def test_put_camera_local_response_reflects_new_camera(
         self, client: TestClient, mock_pipeline
     ):
@@ -140,6 +154,7 @@ class TestPutCameraLocal:
         ).json()
         assert body["camera"]["device_index"] == 2
 
+    @pytest.mark.unit
     def test_put_camera_local_preserves_target_labels(
         self, client: TestClient, mock_pipeline
     ):
@@ -155,6 +170,7 @@ class TestPutCameraLocal:
         config = mock_pipeline.update_config.call_args[0][0]
         assert config.target_labels == ["cat"]
 
+    @pytest.mark.unit
     def test_put_camera_local_preserves_confidence_threshold(
         self, client: TestClient, mock_pipeline
     ):
@@ -177,6 +193,7 @@ class TestPutCameraLocal:
 class TestPutCameraRtsp:
     """Tests for PUT /config/camera with RTSP camera."""
 
+    @pytest.mark.unit
     def test_put_camera_rtsp_returns_200(self, client: TestClient):
         response = client.put(
             "/config/camera",
@@ -189,6 +206,7 @@ class TestPutCameraRtsp:
         )
         assert response.status_code == 200
 
+    @pytest.mark.unit
     def test_put_camera_rtsp_update_config_receives_runtime_config(
         self, client: TestClient, mock_pipeline
     ):
@@ -205,6 +223,7 @@ class TestPutCameraRtsp:
         assert isinstance(config, RuntimeConfig)
         assert config.camera.rtsp_url == "rtsp://192.168.1.10/stream"
 
+    @pytest.mark.unit
     def test_put_camera_rtsp_response_reflects_new_camera(
         self, client: TestClient, mock_pipeline
     ):
@@ -231,12 +250,14 @@ class TestPutCameraRtsp:
 class TestPutCameraValidation:
     """Validation failure tests for PUT /config/camera."""
 
+    @pytest.mark.unit
     def test_put_camera_invalid_source_type_returns_422(self, client: TestClient):
         response = client.put(
             "/config/camera", json={"camera": {"source_type": "usb"}}
         )
         assert response.status_code == 422
 
+    @pytest.mark.unit
     def test_put_camera_local_negative_device_index_returns_422(
         self, client: TestClient
     ):
@@ -246,12 +267,14 @@ class TestPutCameraValidation:
         )
         assert response.status_code == 422
 
+    @pytest.mark.unit
     def test_put_camera_rtsp_missing_url_returns_422(self, client: TestClient):
         response = client.put(
             "/config/camera", json={"camera": {"source_type": "rtsp"}}
         )
         assert response.status_code == 422
 
+    @pytest.mark.unit
     def test_put_camera_rtsp_empty_url_returns_422(self, client: TestClient):
         response = client.put(
             "/config/camera",
@@ -259,6 +282,7 @@ class TestPutCameraValidation:
         )
         assert response.status_code == 422
 
+    @pytest.mark.unit
     def test_put_camera_rtsp_url_wrong_scheme_returns_422(self, client: TestClient):
         response = client.put(
             "/config/camera",
@@ -271,10 +295,12 @@ class TestPutCameraValidation:
         )
         assert response.status_code == 422
 
+    @pytest.mark.unit
     def test_put_camera_missing_camera_field_returns_422(self, client: TestClient):
         response = client.put("/config/camera", json={})
         assert response.status_code == 422
 
+    @pytest.mark.unit
     def test_put_camera_malformed_json_returns_400(self, client: TestClient):
         response = client.put(
             "/config/camera",
@@ -283,6 +309,7 @@ class TestPutCameraValidation:
         )
         assert response.status_code == 400
 
+    @pytest.mark.unit
     def test_put_camera_confidence_threshold_in_body_is_ignored(
         self, client: TestClient
     ):
@@ -302,18 +329,21 @@ class TestPutCameraValidation:
 class TestPutLabels:
     """Tests for PUT /config/labels."""
 
+    @pytest.mark.unit
     def test_put_labels_returns_200(self, client: TestClient):
         response = client.put(
             "/config/labels", json={"target_labels": ["cat", "dog"]}
         )
         assert response.status_code == 200
 
+    @pytest.mark.unit
     def test_put_labels_calls_update_config(
         self, client: TestClient, mock_pipeline
     ):
         client.put("/config/labels", json={"target_labels": ["cat"]})
         assert mock_pipeline.update_config.call_count == 1
 
+    @pytest.mark.unit
     def test_put_labels_update_config_receives_runtime_config(
         self, client: TestClient, mock_pipeline
     ):
@@ -322,10 +352,12 @@ class TestPutLabels:
         assert isinstance(config, RuntimeConfig)
         assert config.target_labels == ["cat", "dog"]
 
+    @pytest.mark.unit
     def test_put_labels_empty_list_is_valid(self, client: TestClient):
         response = client.put("/config/labels", json={"target_labels": []})
         assert response.status_code == 200
 
+    @pytest.mark.unit
     def test_put_labels_response_reflects_new_labels(
         self, client: TestClient, mock_pipeline
     ):
@@ -338,6 +370,7 @@ class TestPutLabels:
         ).json()
         assert body["target_labels"] == ["person"]
 
+    @pytest.mark.unit
     def test_put_labels_preserves_camera(
         self, client: TestClient, mock_pipeline
     ):
@@ -350,6 +383,7 @@ class TestPutLabels:
         config = mock_pipeline.update_config.call_args[0][0]
         assert config.camera.device_index == 1
 
+    @pytest.mark.unit
     def test_put_labels_preserves_confidence_threshold(
         self, client: TestClient, mock_pipeline
     ):
@@ -369,20 +403,24 @@ class TestPutLabels:
 class TestPutLabelsValidation:
     """Validation failure tests for PUT /config/labels."""
 
+    @pytest.mark.unit
     def test_put_labels_missing_field_returns_422(self, client: TestClient):
         response = client.put("/config/labels", json={})
         assert response.status_code == 422
 
+    @pytest.mark.unit
     def test_put_labels_non_array_returns_422(self, client: TestClient):
         response = client.put("/config/labels", json={"target_labels": "cat"})
         assert response.status_code == 422
 
+    @pytest.mark.unit
     def test_put_labels_array_of_non_strings_returns_422(self, client: TestClient):
         response = client.put(
             "/config/labels", json={"target_labels": [1, 2, 3]}
         )
         assert response.status_code == 422
 
+    @pytest.mark.unit
     def test_put_labels_malformed_json_returns_400(self, client: TestClient):
         response = client.put(
             "/config/labels",
