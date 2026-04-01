@@ -271,14 +271,16 @@ class TestDependencyInjection:
 
         call_count = 0
 
-        def get_queue_side_effect(timeout=None):
+        def queue_get_side_effect(timeout=None):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 return result
             return None
 
-        mock_pipeline.get_queue.side_effect = get_queue_side_effect
+        mock_queue = MagicMock()
+        mock_pipeline.get_queue.return_value = mock_queue
+        mock_queue.get.side_effect = queue_get_side_effect
 
         with (
             patch("model_lens.routers.stream._IDLE_TIMEOUT", 0.0),

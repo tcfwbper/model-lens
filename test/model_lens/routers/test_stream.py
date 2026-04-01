@@ -16,6 +16,7 @@
 
 import base64
 import json
+import queue
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -105,9 +106,9 @@ class TestStreamEventPayload:
             call_count += 1
             if call_count == 1:
                 return result
-            return None
+            raise queue.Empty
 
-        mock_pipeline.get_queue.side_effect = get_queue_side_effect
+        mock_pipeline.get_queue.return_value.get.side_effect = get_queue_side_effect
 
     @pytest.mark.unit
     def test_stream_returns_200(self, client: TestClient):
@@ -235,9 +236,9 @@ class TestStreamEventDetectionIsTarget:
             call_count += 1
             if call_count == 1:
                 return result
-            return None
+            raise queue.Empty
 
-        mock_pipeline.get_queue.side_effect = get_queue_side_effect
+        mock_pipeline.get_queue.return_value.get.side_effect = get_queue_side_effect
 
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -259,9 +260,9 @@ class TestStreamEventDetectionIsTarget:
             call_count += 1
             if call_count == 1:
                 return result
-            return None
+            raise queue.Empty
 
-        mock_pipeline.get_queue.side_effect = get_queue_side_effect
+        mock_pipeline.get_queue.return_value.get.side_effect = get_queue_side_effect
 
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -292,9 +293,9 @@ class TestStreamEventEmptyDetections:
             call_count += 1
             if call_count == 1:
                 return result
-            return None
+            raise queue.Empty
 
-        mock_pipeline.get_queue.side_effect = get_queue_side_effect
+        mock_pipeline.get_queue.return_value.get.side_effect = get_queue_side_effect
 
         with client.stream("GET", "/stream") as response:
             for chunk in response.iter_bytes():
@@ -318,9 +319,9 @@ class TestStreamEventFormat:
             call_count += 1
             if call_count == 1:
                 return result
-            return None
+            raise queue.Empty
 
-        mock_pipeline.get_queue.side_effect = get_queue_side_effect
+        mock_pipeline.get_queue.return_value.get.side_effect = get_queue_side_effect
 
     @pytest.mark.unit
     def test_stream_event_line_format(self, client: TestClient):
@@ -365,7 +366,7 @@ class TestStreamKeepalive:
     ):
         # t=0 init; t=1 loop-1 (1s < 30s → no keepalive, no idle);
         # t=31 loop-2 (31s ≥ 30s → keepalive + idle → return).
-        mock_pipeline.get_queue.return_value = None
+        mock_pipeline.get_queue.return_value.get.side_effect = queue.Empty
 
         with patch("model_lens.routers.stream._monotonic", side_effect=_monotonic_seq(0.0, 1.0, 31.0)):
             with client.stream("GET", "/stream") as response:
@@ -378,7 +379,7 @@ class TestStreamKeepalive:
     def test_stream_keepalive_format(
         self, client: TestClient, mock_pipeline
     ):
-        mock_pipeline.get_queue.return_value = None
+        mock_pipeline.get_queue.return_value.get.side_effect = queue.Empty
 
         with patch("model_lens.routers.stream._monotonic", side_effect=_monotonic_seq(0.0, 1.0, 31.0)):
             with client.stream("GET", "/stream") as response:
@@ -412,7 +413,7 @@ class TestStreamIdleTimeout:
         self, client: TestClient, mock_pipeline
     ):
         # t=0 init; t=30 loop-1 (30s ≥ 30s → idle timeout → return).
-        mock_pipeline.get_queue.return_value = None
+        mock_pipeline.get_queue.return_value.get.side_effect = queue.Empty
 
         with patch("model_lens.routers.stream._monotonic", side_effect=_monotonic_seq(0.0, 30.0)):
             with client.stream("GET", "/stream") as response:
@@ -436,9 +437,9 @@ class TestStreamIdleTimeout:
             call_count += 1
             if call_count == 1:
                 return result
-            return None
+            raise queue.Empty
 
-        mock_pipeline.get_queue.side_effect = get_queue_side_effect
+        mock_pipeline.get_queue.return_value.get.side_effect = get_queue_side_effect
 
         with patch(
             "model_lens.routers.stream._monotonic",
@@ -458,7 +459,7 @@ class TestStreamIdleTimeout:
         # Keepalives fire when the interval is hit but must NOT reset the idle
         # timer — the stream should still close when 30s have elapsed since the
         # last frame (which is t=0, the session start time).
-        mock_pipeline.get_queue.return_value = None
+        mock_pipeline.get_queue.return_value.get.side_effect = queue.Empty
 
         with patch(
             "model_lens.routers.stream._monotonic",
@@ -493,9 +494,9 @@ class TestStreamCleanup:
             call_count += 1
             if call_count == 1:
                 return result
-            return None
+            raise queue.Empty
 
-        mock_pipeline.get_queue.side_effect = get_queue_side_effect
+        mock_pipeline.get_queue.return_value.get.side_effect = get_queue_side_effect
 
         with client.stream("GET", "/stream") as response:
             # Read one chunk then close immediately
@@ -514,7 +515,7 @@ class TestStreamCleanup:
         """
         from model_lens.routers.stream import _event_generator
 
-        mock_pipeline.get_queue.return_value = None
+        mock_pipeline.get_queue.return_value.get.side_effect = queue.Empty
         gen = _event_generator(mock_pipeline)
 
         # Must not raise — GeneratorExit is not converted into another exception.
@@ -531,7 +532,7 @@ class TestStreamCleanup:
         """
         from model_lens.routers.stream import _event_generator
 
-        mock_pipeline.get_queue.return_value = None
+        mock_pipeline.get_queue.return_value.get.side_effect = queue.Empty
         gen = _event_generator(mock_pipeline)
 
         # First close: finally block must execute and terminate the generator.
