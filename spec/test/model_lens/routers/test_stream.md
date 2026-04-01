@@ -13,8 +13,6 @@
 ```python
 import base64
 import json
-import time
-from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -46,6 +44,23 @@ def make_pipeline_result():
         result.detections = [detection]
         return result
     return _make
+
+@pytest.fixture(autouse=True)
+def _patch_stream_timeouts(monkeypatch):
+    """Make all stream tests fast by default.
+
+    ``_IDLE_TIMEOUT=0.0`` causes the generator to exit immediately after the
+    first ``None`` result instead of spinning for 30 real seconds.
+    ``_QUEUE_TIMEOUT=0.0`` is a no-op in practice (the mock returns instantly)
+    but makes the intent explicit.
+
+    Classes that test keepalive / idle-timeout behaviour override this fixture
+    at class scope (same fixture name, closer scope wins in pytest) to restore
+    the real ``_IDLE_TIMEOUT`` value — those tests already mock
+    ``time.monotonic`` so they remain fast.
+    """
+    monkeypatch.setattr("model_lens.routers.stream._IDLE_TIMEOUT", 0.0)
+    monkeypatch.setattr("model_lens.routers.stream._QUEUE_TIMEOUT", 0.0)
 ```
 
 ---
@@ -93,6 +108,8 @@ def make_pipeline_result():
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
 | `test_stream_client_disconnect_does_not_raise` | `unit` | Closing the `TestClient` stream mid-flight does not raise a server-side exception | open stream with `stream=True`; close the response before all events are consumed | no exception is raised; `response.close()` completes cleanly |
+| `test_stream_generator_exit_does_not_suppress` | `unit` | The generator that directly calls `.close()` terminates cleanly without throwing any other exceptions, and GeneratorExit propagates normally |
+| `test_stream_generator_exit_triggers_cleanup` | `unit` | When GeneratorExit occurs, the cleanup logic in the finally block is executed, and the generator's `.close()` cleanup function is called once |
 
 ---
 
@@ -100,4 +117,4 @@ def make_pipeline_result():
 
 | Entity | Test Count (approx.) | unit | e2e | race | Key Concerns |
 |---|---|---|---|---|---|
-| `GET /stream` | 21 | 21 | 0 | 0 | event format, base64, keepalive, idle timeout (keepalive does not reset timer), disconnect |
+| `GET /stream` | 23 | 23 | 0 | 0 | event format, base64, keepalive, idle timeout (keepalive does not reset timer), disconnect |
