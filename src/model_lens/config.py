@@ -20,7 +20,6 @@ variable overrides into a single immutable ``AppConfig``.
 """
 
 import argparse
-import importlib.resources
 import logging
 import os
 import tomllib
@@ -75,13 +74,11 @@ class ModelConfig:
     """Model configuration.
 
     Attributes:
-        model_path: Path to the model file.
-        labels_path: Path to the label map file.
+        model: YOLO model name.
         confidence_threshold: Minimum confidence score for a detection.
     """
 
-    model_path: str = ""
-    labels_path: str = ""
+    model: str = "yolov8n"
     confidence_threshold: float = 0.5
 
 
@@ -141,17 +138,9 @@ def validate(cfg: AppConfig) -> None:
     if cfg.camera.source_type == "rtsp" and not cfg.camera.rtsp_url:
         raise ConfigurationError('camera.rtsp_url must be non-empty when source_type is "rtsp"')
 
-    # model.model_path
-    if not cfg.model.model_path:
-        raise ConfigurationError("model.model_path must be non-empty")
-    if not Path(cfg.model.model_path).exists():
-        raise ConfigurationError(f'model.model_path does not exist: "{cfg.model.model_path}"')
-
-    # model.labels_path
-    if not cfg.model.labels_path:
-        raise ConfigurationError("model.labels_path must be non-empty")
-    if not Path(cfg.model.labels_path).exists():
-        raise ConfigurationError(f'model.labels_path does not exist: "{cfg.model.labels_path}"')
+    # model.model
+    if not cfg.model.model:
+        raise ConfigurationError("model.model must be non-empty")
 
     # model.confidence_threshold
     if cfg.model.confidence_threshold <= 0.0 or cfg.model.confidence_threshold > 1.0:
@@ -171,8 +160,7 @@ _ENV_MAP: list[tuple[str, str, str, type]] = [
     ("ML_CAMERA_SOURCE_TYPE", "camera", "source_type", str),
     ("ML_CAMERA_DEVICE_INDEX", "camera", "device_index", int),
     ("ML_CAMERA_RTSP_URL", "camera", "rtsp_url", str),
-    ("ML_MODEL_MODEL_PATH", "model", "model_path", str),
-    ("ML_MODEL_LABELS_PATH", "model", "labels_path", str),
+    ("ML_MODEL_MODEL", "model", "model", str),
     ("ML_MODEL_CONFIDENCE_THRESHOLD", "model", "confidence_threshold", float),
 ]
 
@@ -262,27 +250,6 @@ def load() -> AppConfig:
         kw_dict_for_section = section_map[section][0]
         kw_dict_for_section[key] = coerced
         logger.debug('Env override: %s="%s" \u2192 %s.%s', env_var, value, section, key)
-
-    # --- Resolve bundled package-data paths -----------------------------------
-    if not model_kw.get("model_path"):
-        try:
-            pkg = importlib.resources.files("model_lens.data")
-            model_resource = pkg.joinpath("model.tflite")
-            resolved_model = str(model_resource)
-            model_kw["model_path"] = resolved_model
-            logger.debug("Resolved bundled model_path to %s", resolved_model)
-        except Exception as exc:
-            raise ConfigurationError("Bundled model file could not be resolved from package data") from exc
-
-    if not model_kw.get("labels_path"):
-        try:
-            pkg = importlib.resources.files("model_lens.data")
-            labels_resource = pkg.joinpath("labels.txt")
-            resolved_labels = str(labels_resource)
-            model_kw["labels_path"] = resolved_labels
-            logger.debug("Resolved bundled labels_path to %s", resolved_labels)
-        except Exception as exc:
-            raise ConfigurationError("Bundled labels file could not be resolved from package data") from exc
 
     # --- Build and validate ---------------------------------------------------
     cfg = AppConfig(
