@@ -111,7 +111,8 @@ using `importlib.resources` (or equivalent package-data resolution).
 | Path | Behaviour |
 |---|---|
 | `GET /` | Serves `dist/index.html` directly with `text/html` content type |
-| `GET /static/{path}` | Serves files from `dist/static/` via `StaticFiles` mount |
+| `GET /favicon.svg` | Serves `dist/favicon.svg` with `image/svg+xml` content type |
+| `GET /assets/{path}` | Serves files from `dist/assets/` via `StaticFiles` mount |
 
 **Rules:**
 
@@ -120,10 +121,12 @@ using `importlib.resources` (or equivalent package-data resolution).
   (e.g., `ETag: "d41d8cd98f00b204e9800998ecf8427e"`). The value is a quoted string per
   the HTTP specification. This enables browser caching and conditional `GET` requests via
   `If-None-Match`.
+- `GET /favicon.svg` serves `dist/favicon.svg` with `Content-Type: image/svg+xml`.
 - All other unmatched paths that do not begin with `/config`, `/stream`, `/healthz`, or
-  `/static` fall through to a `404 Not Found` response (FastAPI default).
-- `StaticFiles` is mounted at `/static` and serves the compiled JS, CSS, and other assets
-  from `dist/static/`.
+  `/assets` fall through to a `404 Not Found` response (FastAPI default).
+- `StaticFiles` is mounted at `/assets` and serves the compiled JS, CSS, and other assets
+  from `dist/assets/`. The mount is conditional: if `dist/assets/` does not exist it is
+  silently skipped.
 - If the `dist/` directory or `dist/index.html` cannot be resolved at startup (package not
   installed correctly), the server logs `CRITICAL` and calls `sys.exit(1)`.
 

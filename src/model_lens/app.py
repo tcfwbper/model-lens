@@ -23,7 +23,7 @@ from typing import cast
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from model_lens.config import load
@@ -148,11 +148,15 @@ def create_app() -> FastAPI:
     except FileNotFoundError:
         return app
 
-    static_dir = dist_dir / "static"
-    if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    assets_dir = dist_dir / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
 
     index_html = dist_dir / "index.html"
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    async def _favicon() -> FileResponse:
+        return FileResponse(dist_dir / "favicon.svg", media_type="image/svg+xml")
 
     @app.get("/", include_in_schema=False)
     async def _root() -> Response:

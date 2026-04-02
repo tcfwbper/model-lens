@@ -60,8 +60,8 @@ def client(mock_pipeline, tmp_path):
     dist_dir.mkdir()
     index_html = dist_dir / "index.html"
     index_html.write_bytes(b"<html><body>ModelLens</body></html>")
-    static_dir = dist_dir / "static"
-    static_dir.mkdir()
+    assets_dir = dist_dir / "assets"
+    assets_dir.mkdir()
 
     with patch("model_lens.app.resolve_dist_dir", return_value=dist_dir):
         from model_lens.app import create_app
@@ -93,9 +93,11 @@ def static_client(mock_pipeline, tmp_path):
     dist_dir.mkdir()
     index_content = b"<html><body>ModelLens</body></html>"
     (dist_dir / "index.html").write_bytes(index_content)
-    static_dir = dist_dir / "static"
-    static_dir.mkdir()
-    (static_dir / "app.js").write_bytes(b"console.log('hello');")
+    favicon_content = b"<svg xmlns='http://www.w3.org/2000/svg'/>"
+    (dist_dir / "favicon.svg").write_bytes(favicon_content)
+    assets_dir = dist_dir / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "app.js").write_bytes(b"console.log('hello');")
 
     with patch("model_lens.app.resolve_dist_dir", return_value=dist_dir):
         from model_lens.app import create_app
@@ -104,7 +106,7 @@ def static_client(mock_pipeline, tmp_path):
     app.state.pipeline = mock_pipeline
 
     with TestClient(app) as c:
-        yield c, index_content
+        yield c, index_content, favicon_content
 ```
 
 ### 1.1 Happy Path — GET /
@@ -119,15 +121,23 @@ def static_client(mock_pipeline, tmp_path):
 | `test_root_etag_is_quoted_string` | `unit` | `ETag` value is wrapped in double quotes per HTTP spec | `GET /` | `response.headers["etag"].startswith('"')` and `response.headers["etag"].endswith('"')` |
 | `test_resolve_dist_dir_returns_package_dist_path` | `unit` | `resolve_dist_dir()` returns `importlib.resources.files("model_lens") / "dist"` | `resolve_dist_dir() == Path(str(importlib.resources.files("model_lens"))) / "dist"` |
 
-### 1.2 Happy Path — GET /static/{path}
+### 1.2 Happy Path — GET /assets/{path}
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_static_file_returns_200` | `unit` | `GET /static/app.js` returns HTTP 200 | `GET /static/app.js` | `response.status_code == 200` |
-| `test_static_file_body_matches_content` | `unit` | Response body matches the file content | `GET /static/app.js` | `response.content == b"console.log('hello');"` |
-| `test_static_file_not_found_returns_404` | `unit` | `GET /static/nonexistent.js` returns 404 | `GET /static/nonexistent.js` | `response.status_code == 404` |
+| `test_static_file_returns_200` | `unit` | `GET /assets/app.js` returns HTTP 200 | `GET /assets/app.js` | `response.status_code == 200` |
+| `test_static_file_body_matches_content` | `unit` | Response body matches the file content | `GET /assets/app.js` | `response.content == b"console.log('hello');"` |
+| `test_static_file_not_found_returns_404` | `unit` | `GET /assets/nonexistent.js` returns 404 | `GET /assets/nonexistent.js` | `response.status_code == 404` |
 
-### 1.3 Validation Failures
+### 1.3 Happy Path — GET /favicon.svg
+
+| Test ID | Category | Description | Input | Expected |
+|---|---|---|---|---|
+| `test_favicon_returns_200` | `unit` | `GET /favicon.svg` returns HTTP 200 | `GET /favicon.svg` | `response.status_code == 200` |
+| `test_favicon_content_type_is_svg` | `unit` | Response `Content-Type` is `image/svg+xml` | `GET /favicon.svg` | `"image/svg+xml" in response.headers["content-type"]` |
+| `test_favicon_body_matches_content` | `unit` | Response body matches the content of `favicon.svg` | `GET /favicon.svg` | `response.content == favicon_content` |
+
+### 1.4 Validation Failures
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -169,7 +179,7 @@ def lifespan_mocks(tmp_path):
     dist_dir = tmp_path / "dist"
     dist_dir.mkdir()
     (dist_dir / "index.html").write_bytes(b"<html></html>")
-    (dist_dir / "static").mkdir()
+    (dist_dir / "assets").mkdir()
 
     mock_config = MagicMock()
     mock_config.model.model = "fake.pt"
@@ -249,7 +259,7 @@ def client_with_broken_pipeline(mock_pipeline, tmp_path):
     dist_dir = tmp_path / "dist"
     dist_dir.mkdir()
     (dist_dir / "index.html").write_bytes(b"<html></html>")
-    (dist_dir / "static").mkdir()
+    (dist_dir / "assets").mkdir()
 
     with patch("model_lens.app.resolve_dist_dir", return_value=dist_dir):
         from model_lens.app import create_app
@@ -278,7 +288,7 @@ def client_with_broken_pipeline(mock_pipeline, tmp_path):
 
 | Entity | Test Count (approx.) | unit | e2e | race | Key Concerns |
 |---|---|---|---|---|---|
-| Static assets | 10 | 10 | 0 | 0 | `index.html` body, ETag MD5, quoted ETag, static files, 404 |
+| Static assets | 13 | 13 | 0 | 0 | `index.html` body, ETag MD5, quoted ETag, `/assets/` files, `/favicon.svg`, 404 |
 | Dependency injection | 3 | 3 | 0 | 0 | `get_pipeline` returns correct instance, used by router, stream router calls `get_queue()` not `get_result_queue()` |
 | Lifespan startup/shutdown | 15 | 15 | 0 | 0 | construction order, AppConfig→RuntimeConfig mapping, `start`/`stop`/`teardown` calls, error propagation |
 | Error handling (HTTP 500) | 3 | 3 | 0 | 0 | unhandled exception → 500, JSON body, `detail` key present |
