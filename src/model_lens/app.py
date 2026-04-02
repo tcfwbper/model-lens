@@ -30,7 +30,7 @@ from model_lens.config import load
 from model_lens.detection_pipeline import DetectionPipeline
 from model_lens.entities import LocalCameraConfig, RuntimeConfig
 from model_lens.exceptions import ConfigurationError, OperationError
-from model_lens.inference_engine import TorchInferenceEngine
+from model_lens.inference_engine import YOLOInferenceEngine
 from model_lens.routers import config, health, stream
 
 
@@ -53,7 +53,7 @@ class _StartupExit(SystemExit, Exception):
     """
 
 
-def _startup() -> tuple[TorchInferenceEngine, DetectionPipeline]:
+def _startup() -> tuple[YOLOInferenceEngine, DetectionPipeline]:
     """Run synchronous startup logic.
 
     Returns (engine, pipeline) or raises _StartupExit(1).
@@ -72,10 +72,9 @@ def _startup() -> tuple[TorchInferenceEngine, DetectionPipeline]:
         raise _StartupExit(1)
 
     try:
-        engine = TorchInferenceEngine(
-            model_path=app_config.model.model_path,
+        engine = YOLOInferenceEngine(
+            model=app_config.model.model,
             confidence_threshold=app_config.model.confidence_threshold,
-            labels_path=app_config.model.labels_path,
         )
     except (ConfigurationError, OperationError) as err:
         raise _StartupExit(1) from err
@@ -84,7 +83,7 @@ def _startup() -> tuple[TorchInferenceEngine, DetectionPipeline]:
         camera=LocalCameraConfig(
             device_index=app_config.camera.device_index,
         ),
-        target_labels=[],
+        target_labels=list(engine.get_label_map().values()),
         confidence_threshold=app_config.model.confidence_threshold,
     )
 
@@ -112,6 +111,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     engine, pipeline = _startup()
     app.state.pipeline = pipeline
+    app.state.engine = engine
     try:
         yield
     finally:

@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 
 from model_lens.detection_pipeline import DetectionPipeline
 from model_lens.entities import LocalCameraConfig, RtspCameraConfig, RuntimeConfig
+from model_lens.inference_engine import YOLOInferenceEngine
 from model_lens.schemas import LocalCameraRequest, UpdateCameraRequest, UpdateLabelsRequest
 
 router = APIRouter()
@@ -36,6 +37,10 @@ def _serialize_config(config: RuntimeConfig) -> dict[str, Any]:
         "confidence_threshold": config.confidence_threshold,
         "target_labels": config.target_labels,
     }
+
+
+def _serialize_labels(label_map: dict[int, str]) -> dict[str, list[str]]:
+    return {"valid_labels": list(label_map.values())}
 
 
 @router.get("/config")
@@ -66,6 +71,14 @@ async def put_camera(request: Request, body: UpdateCameraRequest) -> JSONRespons
     )
     pipeline.update_config(new_config)
     return JSONResponse(_serialize_config(pipeline.get_config()))
+
+
+@router.get("/config/labels")
+async def get_labels(request: Request) -> JSONResponse:  # type: ignore[type-arg]
+    """Return the current target label filter."""
+    engine = cast(YOLOInferenceEngine, request.app.state.engine)
+    label_map = engine.get_label_map()
+    return JSONResponse(_serialize_labels(label_map))
 
 
 @router.put("/config/labels")
