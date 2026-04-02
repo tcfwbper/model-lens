@@ -11,65 +11,30 @@
 ## Imports Required
 
 ```python
-import os
+import threading
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from model_lens.exceptions import ConfigurationError, OperationError, ParseError
-from model_lens.inference_engine import TorchInferenceEngine
+from model_lens.exceptions import ConfigurationError, OperationError
+from model_lens.inference_engine import YOLOInferenceEngine
 ```
 
 ---
 
-## 1. `TorchInferenceEngine` — Constructor: Label Map Loading
+## Shared Fixture: `engine_with_mock_model`
 
-> All tests in this section write real label map files to `tmp_path` and call `os.chdir(tmp_path)`
-> so that relative paths resolve correctly. `model_path` is stubbed to a valid dummy `.pt` file
-> (created in `tmp_path`) and `torch.load` is patched to return a mock model, so that label map
-> tests are not blocked by PyTorch.
-
-### 1.1 Happy Path — Construction
-
-| Test ID | Category | Description | Input | Expected |
-|---|---|---|---|---|
-| `test_label_map_single_label` | `unit` | A file with one non-blank line produces a single-entry map | File: `"person\n"` | Internal label map is `{0: "person"}` |
-| `test_label_map_multiple_labels` | `unit` | Multiple non-blank lines are indexed sequentially from 0 | File: `"person\nbicycle\ncar\n"` | Internal label map is `{0: "person", 1: "bicycle", 2: "car"}` |
-| `test_label_map_blank_line_consumes_index` | `unit` | A blank line in the middle consumes an index slot and is stored as `""` | File: `"person\nbicycle\n\nmotorcycle\n"` | Internal label map is `{0: "person", 1: "bicycle", 2: "", 3: "motorcycle"}` |
-| `test_label_map_leading_trailing_whitespace_stripped` | `unit` | Leading and trailing whitespace on non-blank lines is stripped | File: `"  person  \n  bicycle\n"` | Internal label map is `{0: "person", 1: "bicycle"}` |
-| `test_label_map_whitespace_only_line_stored_as_empty_string` | `unit` | A whitespace-only line is stored as `""` | File: `"person\n   \ncar\n"` | Internal label map is `{0: "person", 1: "", 2: "car"}` |
-| `test_label_map_no_trailing_newline` | `unit` | A file without a trailing newline is parsed correctly | File: `"person\nbicycle"` (no trailing newline) | Internal label map is `{0: "person", 1: "bicycle"}` |
-
-### 1.2 Validation Failures — `labels_path`
-
-| Test ID | Category | Description | Input | Expected |
-|---|---|---|---|---|
-| `test_label_map_file_not_found` | `unit` | A non-existent `labels_path` raises `ConfigurationError` | `labels_path="/nonexistent/labels.txt"` | raises `ConfigurationError` |
-| `test_label_map_empty_file` | `unit` | A completely empty file (zero bytes) raises `ParseError` | File: `""` (empty) | raises `ParseError` |
-| `test_label_map_only_blank_lines` | `unit` | A file containing only blank lines raises `ParseError` | File: `"\n\n\n"` | raises `ParseError` |
+A pytest fixture that constructs a ready-to-use `YOLOInferenceEngine` by patching
+`ultralytics.YOLO` to return a mock YOLO model. The mock model's `names` attribute is set to a
+small label map (e.g. `{0: "person", 1: "bicycle", 2: "car"}`), and its `__call__` is configured
+to return empty results by default. Used across sections 4–7.
 
 ---
 
-## 2. `TorchInferenceEngine` — Constructor: Model Loading
+## 1. `YOLOInferenceEngine` — Constructor: `confidence_threshold` Validation
 
-> All tests in this section write a real label map file to `tmp_path`. `torch.load` is patched
-> unless the test specifically targets PyTorch load failure.
-
-### 2.1 Happy Path — Construction
-
-| Test ID | Category | Description | Input | Expected |
-|---|---|---|---|---|
-| `test_model_loads_successfully` | `unit` | A valid `model_path` pointing to an existing file constructs without error | `model_path` points to a real file in `tmp_path`; `torch.load` patched to return a mock | No exception raised |
-
-### 2.2 Validation Failures — `model_path`
-
-| Test ID | Category | Description | Input | Expected |
-|---|---|---|---|---|
-| `test_model_path_not_found` | `unit` | A non-existent `model_path` raises `ConfigurationError` | `model_path="/nonexistent/model.pt"` | raises `ConfigurationError` |
-| `test_model_load_failure` | `unit` | An existing file that PyTorch cannot load raises `OperationError` | `model_path` points to a real file; `torch.load` patched to raise `Exception` | raises `OperationError` |
-
-### 2.3 Validation Failures — `confidence_threshold`
+### 1.1 Validation Failures
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -81,50 +46,39 @@ from model_lens.inference_engine import TorchInferenceEngine
 
 ---
 
-## 3. `TorchInferenceEngine` — Constructor: Package-Data Fallback
+## 2. `YOLOInferenceEngine` — Constructor: Model Loading
 
-> All tests in this section patch `importlib.resources` (or the internal resolution helper) to
-> simulate success and failure. No real package-data files are required.
+> All tests in this section patch `ultralytics.YOLO` to control model-load behaviour.
 
-### 3.1 Happy Path — Construction
-
-| Test ID | Category | Description | Input | Expected |
-|---|---|---|---|---|
-| `test_empty_model_path_uses_package_data` | `unit` | `model_path=""` triggers package-data resolution; succeeds when resource is found | `model_path=""`; `importlib.resources` patched to return a valid path; `torch.load` patched | No exception raised |
-| `test_empty_labels_path_uses_package_data` | `unit` | `labels_path=""` triggers package-data resolution; succeeds when resource is found | `labels_path=""`; `importlib.resources` patched to return a valid path pointing to a real label map file in `tmp_path` | No exception raised |
-
-### 3.2 Validation Failures
+### 2.1 Happy Path
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_empty_model_path_package_data_missing` | `unit` | `model_path=""` and package-data resource cannot be resolved raises `ConfigurationError` | `model_path=""`; `importlib.resources` patched to raise | raises `ConfigurationError` |
-| `test_empty_labels_path_package_data_missing` | `unit` | `labels_path=""` and package-data resource cannot be resolved raises `ConfigurationError` | `labels_path=""`; `importlib.resources` patched to raise | raises `ConfigurationError` |
+| `test_model_loads_successfully` | `unit` | A valid `model` string constructs without error | `model="yolov8n.pt"`; `YOLO` patched to return a mock with `names={0: "person"}` | No exception raised |
+
+### 2.2 Validation Failures
+
+| Test ID | Category | Description | Input | Expected |
+|---|---|---|---|---|
+| `test_model_load_failure` | `unit` | `YOLO()` raising an exception wraps as `OperationError` | `YOLO` patched to raise `Exception` | raises `OperationError` |
 
 ---
 
-## 4. `TorchInferenceEngine.detect()` — Happy Path
+## 3. `YOLOInferenceEngine.detect()` — Happy Path
 
-> All tests in this section construct a `TorchInferenceEngine` with a patched `torch.load` that
-> returns a mock model. The mock model's `__call__` is configured to return controlled raw output
-> so that `detect()` behaviour can be verified deterministically.
->
-> A shared pytest fixture (`engine_with_mock_model`) is recommended to reduce boilerplate: it
-> writes a label map to `tmp_path`, creates a dummy model file, patches `torch.load`, and returns
-> a ready-to-use `TorchInferenceEngine` instance.
-
-### 4.1 Happy Path — `detect()`
+### 3.1 Happy Path — detect()
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
 | `test_detect_returns_list` | `unit` | `detect()` always returns a list | Mock model returns empty output | `isinstance(result, list) is True` |
 | `test_detect_empty_when_no_detections` | `unit` | No detections above threshold returns empty list | Mock model returns no raw detections | `result == []` |
-| `test_detect_single_result_fields` | `unit` | A single detection above threshold produces one `DetectionResult` with correct fields | Mock model returns one detection: index `0`, confidence `0.9`, box `(0.1, 0.2, 0.4, 0.6)` | `result[0].label == "person"`, `result[0].confidence == 0.9`, `result[0].bounding_box == (0.1, 0.2, 0.4, 0.6)` |
+| `test_detect_single_result_fields` | `unit` | A single detection above threshold produces one `DetectionResult` with correct fields | Mock model returns one detection: index `0`, confidence `0.9`, box `[0.1, 0.2, 0.4, 0.6]` | `result[0].label == "person"`, `result[0].confidence == 0.9`, `result[0].bounding_box == [0.1, 0.2, 0.4, 0.6]` |
 | `test_detect_is_target_true` | `unit` | `is_target` is `True` when label is in `target_labels` | `target_labels=["person"]`; mock returns detection with label index `0` (`"person"`) | `result[0].is_target is True` |
 | `test_detect_is_target_false` | `unit` | `is_target` is `False` when label is not in `target_labels` | `target_labels=[]`; mock returns detection with label index `0` (`"person"`) | `result[0].is_target is False` |
 | `test_detect_does_not_mutate_frame` | `unit` | `detect()` does not modify the input frame array | Pass a `numpy.ndarray` frame; record a copy before the call; call `detect()`; compare after | `numpy.array_equal(frame_before, frame_after) is True` |
 | `test_detect_does_not_mutate_target_labels` | `unit` | `detect()` does not modify the `target_labels` list | Pass a `list[str]` as `target_labels`; record a copy before the call; call `detect()`; compare after | `target_labels` equals its pre-call copy |
 
-### 4.2 Boundary Values — `confidence_threshold`
+### 3.2 Boundary Values — `confidence_threshold`
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -132,7 +86,7 @@ from model_lens.inference_engine import TorchInferenceEngine
 | `test_detect_keeps_at_threshold` | `unit` | Detection with confidence exactly equal to threshold is kept | `confidence_threshold=0.5`; mock returns detection with confidence `0.5` | `len(result) == 1` |
 | `test_detect_keeps_above_threshold` | `unit` | Detection with confidence above threshold is kept | `confidence_threshold=0.5`; mock returns detection with confidence `0.51` | `len(result) == 1` |
 
-### 4.3 Ordering — Descending Confidence
+### 3.3 Ordering — Descending Confidence
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -141,24 +95,24 @@ from model_lens.inference_engine import TorchInferenceEngine
 
 ---
 
-## 5. `TorchInferenceEngine.detect()` — Validation Failures
+## 4. `YOLOInferenceEngine.detect()` — Validation Failures
 
-### 5.1 Error Propagation
+### 4.1 Error Propagation
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_detect_unknown_label_index_raises_parse_error` | `unit` | A raw model output index with no entry in the label map raises `ParseError` | Mock returns detection with index `999`; label map has only indices `0`–2 | raises `ParseError` |
 | `test_detect_inference_runtime_failure_raises_operation_error` | `unit` | An unexpected exception from the model's `__call__` raises `OperationError` | Mock model `__call__` raises `RuntimeError` | raises `OperationError` |
+| `test_detect_inference_with_no_nn_module_raises_operation_error` | `unit` | Try inferencing while `_model` attribute is `None` | Set `engine._model = None` then call `detect()` | raises `OperationError` |
 
 ---
 
-## 6. `TorchInferenceEngine.detect()` — Thread Safety (Simulated)
+## 5. `YOLOInferenceEngine.detect()` — Thread Safety (Simulated)
 
 > Thread safety is verified by simulating concurrent access using `unittest.mock` and
 > `threading.Lock` introspection rather than spawning real threads. The goal is to confirm that
 > the lock is acquired and released on every call path, including exception paths.
 
-### 6.1 Concurrent Behaviour
+### 5.1 Concurrent Behaviour
 
 | Test ID | Category | Description | Expected |
 |---|---|---|---|
@@ -167,16 +121,60 @@ from model_lens.inference_engine import TorchInferenceEngine
 
 ---
 
+## 6. `YOLOInferenceEngine.teardown()` — Resource Release
+
+> All tests construct a `YOLOInferenceEngine` via the shared `engine_with_mock_model` fixture
+> unless stated otherwise.
+
+### 6.1 Happy Path
+
+| Test ID | Category | Description | Expected |
+|---|---|---|---|
+| `test_teardown_sets_model_to_none` | `unit` | After `teardown()`, the internal `_model` attribute is `None` | `engine._model is None` |
+| `test_teardown_is_idempotent` | `unit` | Calling `teardown()` twice does not raise | Second call completes without exception |
+
+### 6.2 Error Propagation
+
+| Test ID | Category | Description | Expected |
+|---|---|---|---|
+| `test_detect_after_teardown_raises_operation_error` | `unit` | `detect()` called after `teardown()` raises `OperationError` | raises `OperationError` |
+| `test_get_label_map_after_teardown_raises_operation_error` | `unit` | `get_label_map()` called after `teardown()` raises `OperationError` | raises `OperationError` |
+
+### 6.3 Concurrent Behaviour
+
+| Test ID | Category | Description | Expected |
+|---|---|---|---|
+| `test_teardown_acquires_lock` | `race` | `teardown()` acquires (and releases) the per-instance lock | Patch the engine's `_lock` with a `MagicMock`; call `teardown()`; assert `lock.__enter__` was called once |
+
+---
+
+## 7. `YOLOInferenceEngine.get_label_map()` — Label Map Access
+
+### 7.1 Happy Path
+
+| Test ID | Category | Description | Expected |
+|---|---|---|---|
+| `test_get_label_map_returns_copy` | `unit` | `get_label_map()` returns a copy of the internal label map; mutating the return value does not affect the engine | Call `get_label_map()`, mutate the returned dict, call again — result is unchanged |
+| `test_get_label_map_matches_model_names` | `unit` | Label map matches the mock model's `names` attribute | `engine.get_label_map() == mock_model.names` |
+
+### 7.2 Error Propagation
+
+| Test ID | Category | Description | Expected |
+|---|---|---|---|
+| `test_get_label_map_with_no_model_loaded` | `unit` | `get_label_map()` called while `_model` is `None` raises `OperationError` | raises `OperationError` |
+
+---
+
 ## Summary Table
 
 | Entity | Test Count (approx.) | unit | e2e | race | Key Concerns |
 |---|---|---|---|---|---|
-| `TorchInferenceEngine.__init__` (label map) | 9 | 9 | 0 | 0 | sequential indexing, blank line slot consumption, whitespace stripping, missing file, empty file, all-blank file |
-| `TorchInferenceEngine.__init__` (model) | 3 | 3 | 0 | 0 | successful load, missing file, corrupt file |
-| `TorchInferenceEngine.__init__` (confidence_threshold) | 5 | 5 | 0 | 0 | zero, negative, above one, upper boundary, just above zero |
-| `TorchInferenceEngine.__init__` (package-data fallback) | 4 | 4 | 0 | 0 | empty model path success/failure, empty labels path success/failure |
-| `TorchInferenceEngine.detect()` (happy path) | 7 | 7 | 0 | 0 | return type, empty result, field correctness, is_target true/false, frame not mutated, target_labels not mutated |
-| `TorchInferenceEngine.detect()` (threshold filtering) | 3 | 3 | 0 | 0 | below, at, above threshold |
-| `TorchInferenceEngine.detect()` (ordering) | 2 | 2 | 0 | 0 | descending order, equal confidence both present |
-| `TorchInferenceEngine.detect()` (error propagation) | 2 | 2 | 0 | 0 | unknown index → ParseError, runtime failure → OperationError |
-| `TorchInferenceEngine.detect()` (thread safety) | 2 | 0 | 0 | 2 | lock acquired on success, lock acquired on exception |
+| `YOLOInferenceEngine.__init__` (confidence_threshold) | 5 | 5 | 0 | 0 | zero, negative, above one, upper boundary, just above zero |
+| `YOLOInferenceEngine.__init__` (model loading) | 2 | 2 | 0 | 0 | successful load, load failure → OperationError |
+| `YOLOInferenceEngine.detect()` (happy path) | 7 | 7 | 0 | 0 | return type, empty result, field correctness, is_target true/false, frame not mutated, target_labels not mutated |
+| `YOLOInferenceEngine.detect()` (threshold filtering) | 3 | 3 | 0 | 0 | below, at, above threshold |
+| `YOLOInferenceEngine.detect()` (ordering) | 2 | 2 | 0 | 0 | descending order, equal confidence both present |
+| `YOLOInferenceEngine.detect()` (error propagation) | 2 | 2 | 0 | 0 | runtime failure → OperationError, None model → OperationError |
+| `YOLOInferenceEngine.detect()` (thread safety) | 2 | 0 | 0 | 2 | lock acquired on success, lock acquired on exception |
+| `YOLOInferenceEngine.teardown()` | 4 | 3 | 0 | 1 | model cleared, idempotent, detect-after-teardown → OperationError, lock acquired |
+| `YOLOInferenceEngine.get_label_map()` | 3 | 3 | 0 | 0 | returns copy, matches model names, raises after teardown |

@@ -12,60 +12,81 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared fixtures for TorchInferenceEngine tests."""
+"""Shared fixtures for YOLOInferenceEngine tests."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 
-from model_lens.inference_engine import TorchInferenceEngine
+from model_lens.inference_engine import YOLOInferenceEngine
+
+_DEFAULT_NAMES = {0: "person", 1: "bicycle", 2: "car"}
 
 
 @pytest.fixture()
-def label_map_file(tmp_path: Path) -> Path:
-    """Write a standard three-label map file and return its path.
+def engine_with_mock_model() -> YOLOInferenceEngine:
+    """Return a YOLOInferenceEngine with ultralytics.YOLO patched to a MagicMock.
 
-    Labels:
-        0: person
-        1: bicycle
-        2: car
+    The mock model's names is set to {0: "person", 1: "bicycle", 2: "car"}.
+    Its __call__ returns empty YOLO results by default; individual tests may
+    reconfigure engine._model.return_value as needed.
     """
-    labels = tmp_path / "labels.txt"
-    labels.write_text("person\nbicycle\ncar\n")
-    return labels
+    mock_yolo = MagicMock()
+    mock_yolo.names = _DEFAULT_NAMES.copy()
+    mock_yolo.return_value = _yolo_results([])
 
+    with patch("model_lens.inference_engine.YOLO", return_value=mock_yolo):
+        engine = YOLOInferenceEngine(model="yolov8n.pt", confidence_threshold=0.5)
 
-@pytest.fixture()
-def dummy_model_file(tmp_path: Path) -> Path:
-    """Create a dummy (empty) model file and return its path."""
-    model = tmp_path / "model.pt"
-    model.write_bytes(b"")
-    return model
-
-
-@pytest.fixture()
-def engine_with_mock_model(
-    tmp_path: Path,
-    label_map_file: Path,
-    dummy_model_file: Path,
-) -> TorchInferenceEngine:
-    """Return a TorchInferenceEngine with torch.load patched to a MagicMock model.
-
-    The mock model's __call__ returns an empty list by default; individual tests
-    may reconfigure it as needed.
-    """
-    mock_model = MagicMock()
-    mock_model.return_value = []
-
-    with patch("model_lens.inference_engine.torch.load", return_value=mock_model):
-        engine = TorchInferenceEngine(
-            model_path=str(dummy_model_file),
-            labels_path=str(label_map_file),
-            confidence_threshold=0.5,
-        )
-
-    # Expose the mock so tests can reconfigure __call__
-    engine._model = mock_model  # type: ignore[attr-defined]
     return engine
+
+
+# ---------------------------------------------------------------------------
+# YOLO result helpers
+# ---------------------------------------------------------------------------
+
+
+class _FakeTensor:
+    """Minimal tensor-like object supporting .item() and .tolist()."""
+
+    def __init__(self, val):
+        self._val = val
+
+    def item(self):
+        return self._val
+
+    def tolist(self):
+        return self._val
+
+
+class _FakeBoxes:
+    """Mimics ultralytics Boxes, indexable via .cls, .conf, .xyxy."""
+
+    def __init__(self, detections: list[dict]) -> None:
+        self.cls = [_FakeTensor(d["index"]) for d in detections]
+        self.conf = [_FakeTensor(d["confidence"]) for d in detections]
+        self.xyxy = [_FakeTensor(d["box"]) for d in detections]
+
+    def __len__(self) -> int:
+        return len(self.cls)
+
+
+class _FakeResults:
+    """Mimics a single ultralytics Results object."""
+
+    def __init__(self, detections: list[dict]) -> None:
+        self.boxes = _FakeBoxes(detections)
+
+
+def _yolo_results(detections: list[dict]) -> list[_FakeResults]:
+    """Wrap a list of detection dicts in a YOLO-like results list."""
+    return [_FakeResults(detections)]
+
+
+def _det(
+    index: int,
+    confidence: float,
+    box: list[float] | None = None,
+) -> dict:
+    """Shorthand for building a detection dict."""
+    return {"index": index, "confidence": confidence, "box": box or [0.0, 0.0, 1.0, 1.0]}

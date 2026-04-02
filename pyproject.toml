@@ -2,7 +2,11 @@
 name = "model_lens"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "opencv-python>=4.8.0,<4.10.0",
+    "ultralytics==8.4.33",
+    "uvicorn==0.42.0",
+]
 
 [dependency-groups]
 dev = [
@@ -12,9 +16,9 @@ dev = [
     "setuptools==78.1.1",
     "mypy==1.6.1",
     "isort==5.12.0",
-    "black[jupyter]==23.10.1",
+    "black[jupyter]==26.3.1",
     "docformatter==1.7.5",
-    "pylint==2.13.9",
+    "pylint==4.0.5",
     "flake8==7.3.0",
     "ruff==0.1.4",
     "pytest==7.4.3",
@@ -34,11 +38,14 @@ known_first_party = ["src/model_lens"]
 
 [tool.black]
 line-length = 120
-target-version = ["py311", "py312", "py313"]
+target-version = ["py311"]
+
+[tool.pylint.TYPECHECK]
+generated-members = ["cv2.*"]
 
 [tool.pylint."MESSAGES CONTROL"]
 max-line-length = 120
-disable = "bad-continuation,duplicate-code,too-few-public-methods,useless-import-alias"
+disable = "duplicate-code,too-few-public-methods,useless-import-alias,useless-super-delegation,too-many-instance-attributes,too-many-branches,too-many-locals,too-many-statements"
 
 [tool.pytest.ini_options]
 minversion = "6.2"

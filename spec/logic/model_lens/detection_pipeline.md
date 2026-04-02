@@ -18,7 +18,7 @@ A single published output produced by one successful frame iteration.
 
 | Field | Type | Description |
 |---|---|---|
-| `jpeg_bytes` | `bytes` | JPEG-encoded RGB image, converted from the original BGR frame before inference |
+| `jpeg_bytes` | `bytes` | JPEG-encoded image produced by passing the BGR frame directly to `cv2.imencode` |
 | `timestamp` | `float` | POSIX timestamp (seconds since 1970-01-01T00:00:00 UTC) copied from `Frame.timestamp` |
 | `source` | `str` | Camera source identifier copied from `Frame.source` |
 | `detections` | `list[DetectionResult]` | Filtered, label-resolved detections from `InferenceEngine.detect()`, ordered by descending confidence |
@@ -27,7 +27,7 @@ A single published output produced by one successful frame iteration.
 
 - Implemented as a **frozen dataclass** (`@dataclass(frozen=True)`).
 - `jpeg_bytes` is always a complete, valid JPEG buffer. Encoding is performed by the pipeline
-  using `cv2.imencode(".jpg", rgb_frame)` before the result is published.
+  using `cv2.imencode(".jpg", frame.data)` (BGR input) before the result is published.
 - `PipelineResult` is consumed exclusively by the Stream API. No other component holds a
   reference to it.
 - `timestamp` and `source` are copied directly from the `Frame` produced by `CameraCapture`;
@@ -130,6 +130,17 @@ Called by the Config API to apply a new `RuntimeConfig`. Thread-safe.
 This method returns immediately; the camera recreation happens asynchronously inside the frame
 loop on the next iteration.
 
+#### `get_config() -> RuntimeConfig`
+
+Returns a snapshot of the current `RuntimeConfig`. Thread-safe.
+
+1. Acquires the `RuntimeConfig` lock.
+2. Reads the stored `RuntimeConfig` reference.
+3. Releases the lock.
+4. Returns the reference.
+
+Called by the Config API to read the current configuration for reporting or comparison purposes.
+
 #### `get_queue() -> queue.Queue[PipelineResult]`
 
 Returns the result queue. Called once by the Stream API at startup to obtain the queue reference.
@@ -148,11 +159,10 @@ loop:
     ③ If no active CameraCapture → wait for _camera_changed_event, then go to ①
     ④ FPS throttle check → interruptible wait if within minimum inter-frame interval
     ⑤ frame = camera.read()
-    ⑥ Convert BGR → RGB (copy; do not modify Frame.data)
-    ⑦ jpeg_bytes = cv2.imencode(".jpg", rgb_frame)
-    ⑧ results = engine.detect(frame.data, runtime_config.target_labels)
-    ⑨ Construct PipelineResult
-    ⑩ Publish to queue (drop oldest if full)
+    ⑥ jpeg_bytes = cv2.imencode(".jpg", frame.data)
+    ⑦ results = engine.detect(frame.data, runtime_config.target_labels)
+    ⑧ Construct PipelineResult
+    ⑨ Publish to queue (drop oldest if full)
 ```
 
 #### Step-by-step Rules
@@ -197,16 +207,13 @@ loop:
   2. Close and discard the `CameraCapture` instance (set internal reference to `None`).
   3. Continue to step ③ (wait for a new camera config from the user).
 
-**⑥ BGR → RGB conversion**
-- `rgb_frame = frame.data[:, :, ::-1].copy()`
-- The original `frame.data` array is never modified.
-
-**⑦ JPEG encoding**
-- `success, buffer = cv2.imencode(".jpg", rgb_frame)`
+**⑥ JPEG encoding**
+- `success, buffer = cv2.imencode(".jpg", frame.data)`
+- `cv2.imencode` natively accepts BGR input; no colour-space conversion is needed.
 - If `success` is `False`, log a `WARNING` and skip this frame (continue to next iteration).
 - `jpeg_bytes = buffer.tobytes()`
 
-**⑧ Inference**
+**⑦ Inference**
 - Reads `target_labels` from the current `RuntimeConfig` under the lock (snapshot only; lock
   released before calling `detect()`).
 - Calls `engine.detect(frame.data, target_labels)`.
@@ -215,7 +222,7 @@ loop:
   `sys.exit(1)`. The model and label map are permanently mismatched; no future frame will
   succeed.
 
-**⑨ Construct `PipelineResult`**
+**⑧ Construct `PipelineResult`**
 
 ```python
 PipelineResult(
@@ -226,7 +233,7 @@ PipelineResult(
 )
 ```
 
-**⑩ Publish to queue**
+**⑨ Publish to queue**
 - If the queue is full (`queue.Queue.full()` returns `True`):
   1. Discard the oldest item with a non-blocking `queue.Queue.get_nowait()` (ignore the
      discarded value).
@@ -277,7 +284,7 @@ Web Server tears down InferenceEngine (outside pipeline responsibility)
 
 | Shared Resource | Protection Mechanism |
 |---|---|
-| `RuntimeConfig` reference | `threading.Lock` acquired for read (snapshot) and write (swap) |
+| `RuntimeConfig` reference | `threading.Lock` acquired for read (snapshot in frame loop and `get_config()`) and write (swap in `update_config()`) |
 | `CameraCapture` instance | Owned exclusively by the background thread; only recreated inside the frame loop; `close()` called from `stop()` only after the thread has exited |
 | `InferenceEngine` | Per-instance lock inside `InferenceEngine.detect()` (owned by the engine) |
 | `queue.Queue` | Thread-safe by design (`queue.Queue` is internally synchronised) |

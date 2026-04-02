@@ -41,41 +41,27 @@ def bundled_paths(tmp_path: Path) -> tuple[Path, Path]:
 
 
 @pytest.fixture()
-def valid_app_config(bundled_paths: tuple[Path, Path]) -> AppConfig:
-    """Return a fully valid AppConfig with real on-disk paths.
-
-    Args:
-        bundled_paths: Fixture providing existing model and labels files.
+def valid_app_config() -> AppConfig:
+    """Return a fully valid AppConfig using default model name.
 
     Returns:
         A valid AppConfig instance.
     """
-    model_file, labels_file = bundled_paths
     return AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(),
         model=ModelConfig(
-            model_path=str(model_file),
-            labels_path=str(labels_file),
+            model="yolov8n",
             confidence_threshold=0.5,
         ),
     )
 
 
 @pytest.fixture()
-def minimal_toml_content(bundled_paths: tuple[Path, Path]) -> str:
-    """Return a minimal valid TOML string referencing real on-disk paths.
-
-    Args:
-        bundled_paths: Fixture providing existing model and labels files.
+def minimal_toml_content() -> str:
+    """Return a minimal valid TOML string.
 
     Returns:
         A TOML string suitable for writing to a config file.
     """
-    model_file, labels_file = bundled_paths
-    return (
-        f'[model]\n'
-        f'model_path = "{model_file}"\n'
-        f'labels_path = "{labels_file}"\n'
-        f'confidence_threshold = 0.5\n'
-    )
+    return '[model]\nmodel = "yolov8n"\nconfidence_threshold = 0.5\n'

@@ -51,9 +51,9 @@ echo "- flake8: done"
 
 echo "- pytest: start"
 if [[ "$RUN_ALL" == true ]]; then
-    python -m pytest --cov=src/model_lens --disable-warnings
+    python -m pytest --cov=src/model_lens --cov-report=term-missing --disable-warnings
 else
-    python -m pytest --cov=src/model_lens --disable-warnings -m "unit"
+    python -m pytest --cov=src/model_lens --cov-report=term-missing --disable-warnings -m "unit"
 fi
 echo "- pytest: done"
 

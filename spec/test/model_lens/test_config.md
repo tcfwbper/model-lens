@@ -22,6 +22,7 @@ import pytest
 from model_lens.config import (
     AppConfig,
     CameraConfig,
+    ConfigLoader,
     ModelConfig,
     ServerConfig,
     load,
@@ -99,24 +100,21 @@ from model_lens.exceptions import ConfigurationError
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_model_config_default_model_path` | unit | Default model path is `""` | `ModelConfig()` | `instance.model_path == ""` |
-| `test_model_config_default_labels_path` | unit | Default labels path is `""` | `ModelConfig()` | `instance.labels_path == ""` |
+| `test_model_config_default_model` | unit | Default model name is `"yolov8n"` | `ModelConfig()` | `instance.model == "yolov8n"` |
 | `test_model_config_default_confidence_threshold` | unit | Default confidence threshold is `0.5` | `ModelConfig()` | `instance.confidence_threshold == 0.5` |
 
 ### 3.2 Happy Path — Explicit Construction
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_model_config_explicit_model_path` | unit | Custom model path is stored | `ModelConfig(model_path="/a/b/model.tflite", labels_path="/a/b/labels.txt", confidence_threshold=0.5)` | `instance.model_path == "/a/b/model.tflite"` |
-| `test_model_config_explicit_labels_path` | unit | Custom labels path is stored | `ModelConfig(model_path="/a/b/model.tflite", labels_path="/a/b/labels.txt", confidence_threshold=0.5)` | `instance.labels_path == "/a/b/labels.txt"` |
-| `test_model_config_explicit_confidence_threshold` | unit | Custom confidence threshold is stored | `ModelConfig(model_path="/a/b/model.tflite", labels_path="/a/b/labels.txt", confidence_threshold=0.9)` | `instance.confidence_threshold == 0.9` |
+| `test_model_config_explicit_model` | unit | Custom model name is stored | `ModelConfig(model="yolov8s", confidence_threshold=0.5)` | `instance.model == "yolov8s"` |
+| `test_model_config_explicit_confidence_threshold` | unit | Custom confidence threshold is stored | `ModelConfig(model="yolov8n", confidence_threshold=0.9)` | `instance.confidence_threshold == 0.9` |
 
 ### 3.3 Immutability
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_model_config_model_path_is_immutable` | unit | Assigning to `model_path` raises | `instance.model_path = "/new"` on a constructed `ModelConfig()` | `raises FrozenInstanceError` |
-| `test_model_config_labels_path_is_immutable` | unit | Assigning to `labels_path` raises | `instance.labels_path = "/new"` on a constructed `ModelConfig()` | `raises FrozenInstanceError` |
+| `test_model_config_model_is_immutable` | unit | Assigning to `model` raises | `instance.model = "yolov8s"` on a constructed `ModelConfig()` | `raises FrozenInstanceError` |
 | `test_model_config_confidence_threshold_is_immutable` | unit | Assigning to `confidence_threshold` raises | `instance.confidence_threshold = 0.9` on a constructed `ModelConfig()` | `raises FrozenInstanceError` |
 
 ---
@@ -127,7 +125,7 @@ from model_lens.exceptions import ConfigurationError
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_app_config_stores_server` | unit | `server` field is stored correctly | `AppConfig(server=ServerConfig(), camera=CameraConfig(), model=ModelConfig(model_path="/m", labels_path="/l", confidence_threshold=0.5))` with mocked path existence | `instance.server == ServerConfig()` |
+| `test_app_config_stores_server` | unit | `server` field is stored correctly | `AppConfig(server=ServerConfig(), camera=CameraConfig(), model=ModelConfig(model="yolov8n", confidence_threshold=0.5))` | `instance.server == ServerConfig()` |
 | `test_app_config_stores_camera` | unit | `camera` field is stored correctly | same as above | `instance.camera == CameraConfig()` |
 | `test_app_config_stores_model` | unit | `model` field is stored correctly | same as above | `instance.model.confidence_threshold == 0.5` |
 
@@ -198,21 +196,14 @@ from model_lens.exceptions import ConfigurationError
 | `test_validate_camera_rtsp_url_empty_when_rtsp_raises` | unit | Empty RTSP URL with `source_type="rtsp"` raises `ConfigurationError` | `AppConfig` with `CameraConfig(source_type="rtsp", rtsp_url="", ...)` | `raises ConfigurationError('camera.rtsp_url must be non-empty when source_type is "rtsp"')` |
 | `test_validate_camera_rtsp_url_empty_when_local_valid` | unit | Empty RTSP URL with `source_type="local"` is valid | `AppConfig` with `CameraConfig(source_type="local", rtsp_url="", ...)` | does not raise |
 
-### 5.8 Validation Failures — `model.model_path`
+### 5.8 Validation Failures — `model.model`
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_validate_model_path_empty_raises` | unit | Empty model path raises `ConfigurationError` | `AppConfig` with `ModelConfig(model_path="", ...)` | `raises ConfigurationError("model.model_path must be non-empty")` |
-| `test_validate_model_path_not_exist_raises` | unit | Non-existent model path raises `ConfigurationError` | `AppConfig` with `ModelConfig(model_path="/nonexistent/model.tflite", ...)` | `raises ConfigurationError('model.model_path does not exist: "/nonexistent/model.tflite"')` |
+| `test_validate_model_path_empty_raises` | unit | Empty model name raises `ConfigurationError` | `AppConfig` with `ModelConfig(model="", ...)` | `raises ConfigurationError("model.model must be non-empty")` |
 
-### 5.9 Validation Failures — `model.labels_path`
+### 5.9 Validation Failures — `model.confidence_threshold`
 
-| Test ID | Category | Description | Input | Expected |
-|---|---|---|---|---|
-| `test_validate_labels_path_empty_raises` | unit | Empty labels path raises `ConfigurationError` | `AppConfig` with `ModelConfig(labels_path="", ...)` | `raises ConfigurationError("model.labels_path must be non-empty")` |
-| `test_validate_labels_path_not_exist_raises` | unit | Non-existent labels path raises `ConfigurationError` | `AppConfig` with `ModelConfig(labels_path="/nonexistent/labels.txt", ...)` | `raises ConfigurationError('model.labels_path does not exist: "/nonexistent/labels.txt"')` |
-
-### 5.10 Validation Failures — `model.confidence_threshold`
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -226,10 +217,8 @@ from model_lens.exceptions import ConfigurationError
 
 ## 6. `load()` — Config File Resolution
 
-> All `load()` tests patch `sys.argv` to control CLI arguments, use `tmp_path` + `os.chdir()` to
-> control the working directory, and mock `importlib.resources` to avoid real filesystem
-> dependency for bundled package-data files. File existence checks for user-supplied paths are
-> satisfied by creating real files inside `tmp_path`.
+> All `load()` tests patch `sys.argv` to control CLI arguments and use `tmp_path` + `os.chdir()`
+> to control the working directory.
 
 ### 6.1 Happy Path — load
 
@@ -285,8 +274,7 @@ from model_lens.exceptions import ConfigurationError
 | `test_load_env_override_camera_source_type` | unit | `ML_CAMERA_SOURCE_TYPE` overrides source type | `ML_CAMERA_SOURCE_TYPE="rtsp"` and `ML_CAMERA_RTSP_URL="rtsp://h/s"` | `AppConfig.camera.source_type == "rtsp"` |
 | `test_load_env_override_camera_device_index` | unit | `ML_CAMERA_DEVICE_INDEX` overrides device index | `ML_CAMERA_DEVICE_INDEX="2"` | `AppConfig.camera.device_index == 2` |
 | `test_load_env_override_camera_rtsp_url` | unit | `ML_CAMERA_RTSP_URL` overrides RTSP URL | `ML_CAMERA_SOURCE_TYPE="rtsp"` and `ML_CAMERA_RTSP_URL="rtsp://cam/live"` | `AppConfig.camera.rtsp_url == "rtsp://cam/live"` |
-| `test_load_env_override_model_model_path` | unit | `ML_MODEL_MODEL_PATH` overrides model path | `ML_MODEL_MODEL_PATH=str(existing_file)` | `AppConfig.model.model_path == str(existing_file)` |
-| `test_load_env_override_model_labels_path` | unit | `ML_MODEL_LABELS_PATH` overrides labels path | `ML_MODEL_LABELS_PATH=str(existing_file)` | `AppConfig.model.labels_path == str(existing_file)` |
+| `test_load_env_override_model_model` | unit | `ML_MODEL_MODEL` overrides model name | `ML_MODEL_MODEL="yolov8s"` | `AppConfig.model.model == "yolov8s"` |
 | `test_load_env_override_model_confidence_threshold` | unit | `ML_MODEL_CONFIDENCE_THRESHOLD` overrides threshold | `ML_MODEL_CONFIDENCE_THRESHOLD="0.75"` | `AppConfig.model.confidence_threshold == 0.75` |
 | `test_load_env_override_logs_debug` | unit | Debug log is emitted for each env override applied | `ML_SERVER_PORT="9999"` | `logger.debug` called with `'Env override: ML_SERVER_PORT="9999" → server.port'` |
 
@@ -302,26 +290,27 @@ from model_lens.exceptions import ConfigurationError
 
 ---
 
-## 8. `load()` — Package-Data Path Resolution
+## 8. `ConfigLoader`
 
-> All tests in this section mock `importlib.resources` to avoid real filesystem dependency.
+> `ConfigLoader` is the class-based entry point for configuration loading, defined in
+> `src/model_lens/config.py`. It wraps the resolution, merging, validation, and construction
+> logic that produces an `AppConfig`. Callers (e.g. `app.py` lifespan) instantiate
+> `ConfigLoader` and call `load()`.
 
-### 8.1 Happy Path — load
+### 8.1 Happy Path — Construction and Load
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_load_resolves_bundled_model_path_when_empty` | unit | Empty `model_path` is resolved to bundled path | `model_path` not set in TOML or env; `importlib.resources` mocked to return `"/bundled/model.tflite"` | `AppConfig.model.model_path == "/bundled/model.tflite"` |
-| `test_load_resolves_bundled_labels_path_when_empty` | unit | Empty `labels_path` is resolved to bundled path | `labels_path` not set in TOML or env; `importlib.resources` mocked to return `"/bundled/labels.txt"` | `AppConfig.model.labels_path == "/bundled/labels.txt"` |
-| `test_load_skips_bundled_resolution_when_model_path_set` | unit | Non-empty `model_path` skips bundled resolution | `ML_MODEL_MODEL_PATH=str(existing_file)`; `importlib.resources` mock not called for model | `importlib.resources` not called for model path resolution |
-| `test_load_skips_bundled_resolution_when_labels_path_set` | unit | Non-empty `labels_path` skips bundled resolution | `ML_MODEL_LABELS_PATH=str(existing_file)`; `importlib.resources` mock not called for labels | `importlib.resources` not called for labels path resolution |
-| `test_load_bundled_resolution_logs_debug` | unit | Debug log is emitted when bundled path is resolved | bundled model path resolved | `logger.debug` called with `f"Resolved bundled model_path to /bundled/model.tflite"` |
+| `test_config_loader_instantiation` | unit | `ConfigLoader` can be instantiated without arguments | `ConfigLoader()` | does not raise |
+| `test_config_loader_load_returns_app_config` | unit | `ConfigLoader().load()` returns an `AppConfig` instance | bundled paths mocked; no TOML file | `isinstance(result, AppConfig)` |
+| `test_config_loader_load_uses_defaults_when_no_config_file` | unit | When no `--config` flag and no `model_lens.toml` in cwd, built-in defaults are used | `sys.argv = ["prog"]`; cwd has no `model_lens.toml`; bundled paths mocked | `result.server.port == 8080` |
 
 ### 8.2 Error Propagation
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_load_bundled_model_path_not_found_raises` | unit | `importlib.resources` failure for model raises `ConfigurationError` | `importlib.resources` raises for model file | `raises ConfigurationError("Bundled model file could not be resolved from package data")` |
-| `test_load_bundled_labels_path_not_found_raises` | unit | `importlib.resources` failure for labels raises `ConfigurationError` | `importlib.resources` raises for labels file | `raises ConfigurationError("Bundled labels file could not be resolved from package data")` |
+| `test_config_loader_load_raises_configuration_error_on_invalid_config` | unit | `ConfigLoader().load()` raises `ConfigurationError` when validation fails | env override sets `ML_SERVER_PORT="0"`; bundled paths mocked | `raises ConfigurationError` |
+| `test_config_loader_load_raises_configuration_error_on_invalid_toml` | unit | `ConfigLoader().load()` raises `ConfigurationError` when TOML is malformed | config file containing `not valid toml :::` | `raises ConfigurationError` with message starting `"Failed to parse config file at "` |
 
 ---
 
@@ -331,10 +320,10 @@ from model_lens.exceptions import ConfigurationError
 |---|---|---|---|---|---|
 | `ServerConfig` | 9 | 9 | 0 | 0 | default values, explicit construction, frozen immutability |
 | `config.CameraConfig` | 9 | 9 | 0 | 0 | default values, explicit construction, frozen immutability |
-| `ModelConfig` | 9 | 9 | 0 | 0 | default values, explicit construction, frozen immutability |
-| `AppConfig` | 6 | 6 | 0 | 0 | field storage, frozen immutability, `validate()` called on construction |
-| `validate()` | 24 | 24 | 0 | 0 | all field constraints, boundary values, exact error messages |
+| `ModelConfig` | 6 | 6 | 0 | 0 | default values, explicit construction, frozen immutability |
+| `AppConfig` | 6 | 6 | 0 | 0 | field storage, frozen immutability |
+| `validate()` | 20 | 20 | 0 | 0 | all field constraints, boundary values, exact error messages |
 | `load()` — file resolution | 10 | 10 | 0 | 0 | no file, cwd discovery, explicit `--config`, TOML parse error |
 | `load()` — TOML merging | 5 | 5 | 0 | 0 | partial override, unknown keys ignored, missing keys retain defaults |
-| `load()` — env var overrides | 10 | 10 | 0 | 0 | all 9 env vars, coercion for int/float/str, debug logging |
-| `load()` — package-data resolution | 7 | 7 | 0 | 0 | bundled path resolved, skipped when set, failure cases, debug logging |
+| `load()` — env var overrides | 9 | 9 | 0 | 0 | all 8 env vars, coercion for int/float/str, debug logging |
+| `ConfigLoader` | 5 | 5 | 0 | 0 | instantiation, load returns `AppConfig`, error propagation |

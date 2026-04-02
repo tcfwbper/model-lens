@@ -351,12 +351,76 @@ class TestUpdateConfigHappyPath:
 
 
 # ===========================================================================
-# Section 6 — DetectionPipeline.get_queue
+# Section 6 — DetectionPipeline.get_config
+# ===========================================================================
+
+
+class TestGetConfigHappyPath:
+    """6.1 Happy Path."""
+
+    @pytest.mark.unit
+    def test_get_config_returns_runtime_config(
+        self, pipeline: DetectionPipeline, default_config: RuntimeConfig
+    ) -> None:
+        assert pipeline.get_config() is default_config
+
+    @pytest.mark.unit
+    def test_get_config_returns_updated_config(self, pipeline: DetectionPipeline) -> None:
+        new_config = RuntimeConfig(target_labels=["dog"])
+        pipeline.update_config(new_config)
+        assert pipeline.get_config() is new_config
+
+
+class TestGetConfigConcurrentBehaviour:
+    """6.2 Concurrent Behaviour."""
+
+    @pytest.mark.race
+    def test_get_config_acquires_lock(self, pipeline: DetectionPipeline) -> None:
+        real_lock = pipeline._config_lock
+        mock_lock = MagicMock(wraps=real_lock)
+        mock_lock.__enter__ = MagicMock(side_effect=lambda: real_lock.__enter__())
+        mock_lock.__exit__ = MagicMock(side_effect=lambda *a: real_lock.__exit__(*a))
+        pipeline._config_lock = mock_lock
+
+        pipeline.get_config()
+
+        mock_lock.__enter__.assert_called_once()
+        mock_lock.__exit__.assert_called_once()
+
+    @pytest.mark.race
+    def test_get_config_concurrent_with_update_config(self, pipeline: DetectionPipeline) -> None:
+        exceptions: list[Exception] = []
+
+        def getter() -> None:
+            try:
+                result = pipeline.get_config()
+                assert isinstance(result, RuntimeConfig)
+            except Exception as exc:  # noqa: BLE001
+                exceptions.append(exc)
+
+        def updater(i: int) -> None:
+            try:
+                pipeline.update_config(RuntimeConfig(target_labels=[f"label_{i}"]))
+            except Exception as exc:  # noqa: BLE001
+                exceptions.append(exc)
+
+        threads = [threading.Thread(target=getter) for _ in range(10)]
+        threads += [threading.Thread(target=updater, args=(i,)) for i in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5.0)
+
+        assert exceptions == []
+
+
+# ===========================================================================
+# Section 7 — DetectionPipeline.get_queue
 # ===========================================================================
 
 
 class TestGetQueueHappyPath:
-    """6.1 Happy Path."""
+    """7.1 Happy Path."""
 
     @pytest.mark.unit
     def test_get_queue_returns_queue_instance(self, pipeline: DetectionPipeline) -> None:
@@ -370,7 +434,7 @@ class TestGetQueueHappyPath:
 
 
 # ===========================================================================
-# Section 7 — DetectionPipeline._run_one_iteration
+# Section 8 — DetectionPipeline._run_one_iteration
 # ===========================================================================
 
 
@@ -381,7 +445,7 @@ def _make_mock_buffer() -> MagicMock:
 
 
 class TestRunOneIterationHappyPath:
-    """7.1 Happy Path — Full Iteration."""
+    """8.1 Happy Path — Full Iteration."""
 
     @pytest.mark.unit
     def test_run_one_iteration_reads_frame(
@@ -466,56 +530,8 @@ class TestRunOneIterationHappyPath:
         assert args[1] == ["cat"]
 
 
-class TestRunOneIterationBgrToRgb:
-    """7.2 Happy Path — BGR→RGB Conversion."""
-
-    @pytest.mark.unit
-    def test_run_one_iteration_converts_bgr_to_rgb(
-        self, pipeline: DetectionPipeline, mock_camera: MagicMock
-    ) -> None:
-        bgr_data = np.zeros((480, 640, 3), dtype=np.uint8)
-        bgr_data[:, :, 0] = 10  # B channel
-        bgr_data[:, :, 1] = 20  # G channel
-        bgr_data[:, :, 2] = 30  # R channel
-        mock_camera.read.return_value = Frame(
-            data=bgr_data,
-            timestamp=1748000400.0,
-            source="local:0",
-        )
-
-        captured_args: list = []
-
-        def fake_imencode(ext, img, *args, **kwargs):
-            captured_args.append(img)
-            return (True, _make_mock_buffer())
-
-        with patch("cv2.imencode", side_effect=fake_imencode):
-            pipeline._run_one_iteration()
-
-        assert len(captured_args) == 1
-        encoded_img = captured_args[0]
-        # Channel 0 of the encoded image should equal channel 2 of the original BGR
-        assert np.array_equal(encoded_img[:, :, 0], bgr_data[:, :, 2])
-
-    @pytest.mark.unit
-    def test_run_one_iteration_does_not_modify_frame_data(
-        self, pipeline: DetectionPipeline, mock_camera: MagicMock
-    ) -> None:
-        bgr_data = np.zeros((480, 640, 3), dtype=np.uint8)
-        bgr_data[:, :, 0] = 10
-        original_channel_0 = bgr_data[:, :, 0].copy()
-        mock_camera.read.return_value = Frame(
-            data=bgr_data,
-            timestamp=1748000400.0,
-            source="local:0",
-        )
-        with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
-            pipeline._run_one_iteration()
-        assert np.array_equal(bgr_data[:, :, 0], original_channel_0)
-
-
 class TestRunOneIterationEncodeFailure:
-    """7.3 Error Propagation — JPEG Encoding."""
+    """8.2 Error Propagation — JPEG Encoding."""
 
     @pytest.mark.unit
     def test_run_one_iteration_skips_frame_on_encode_failure(self, pipeline: DetectionPipeline) -> None:
@@ -532,7 +548,7 @@ class TestRunOneIterationEncodeFailure:
 
 
 class TestRunOneIterationInferenceErrors:
-    """7.4 Error Propagation — Inference Engine."""
+    """8.3 Error Propagation — Inference Engine."""
 
     @pytest.mark.unit
     def test_run_one_iteration_skips_frame_on_operation_error(
@@ -576,7 +592,7 @@ class TestRunOneIterationInferenceErrors:
 
 
 class TestRunOneIterationCameraErrors:
-    """7.5 Error Propagation — Camera Capture."""
+    """8.4 Error Propagation — Camera Capture."""
 
     @pytest.mark.unit
     def test_run_one_iteration_clears_camera_on_operation_error(
@@ -625,7 +641,7 @@ class TestRunOneIterationCameraErrors:
 
 
 class TestRunOneIterationNoneCamera:
-    """7.6 None / Empty Input."""
+    """8.5 None / Empty Input."""
 
     @pytest.mark.unit
     def test_run_one_iteration_does_not_read_when_no_camera(
@@ -659,7 +675,7 @@ class TestRunOneIterationNoneCamera:
 
 
 class TestRunOneIterationStateTransitions:
-    """7.7 State Transitions."""
+    """8.6 State Transitions."""
 
     @pytest.mark.unit
     def test_run_one_iteration_recreates_local_camera_on_event(
@@ -763,7 +779,7 @@ class TestRunOneIterationStateTransitions:
 
 
 class TestRunOneIterationQueueCapacity:
-    """7.8 Boundary Values — queue capacity."""
+    """8.7 Boundary Values — queue capacity."""
 
     @pytest.mark.unit
     def test_run_one_iteration_drops_oldest_when_queue_full(
@@ -798,9 +814,22 @@ class TestRunOneIterationQueueCapacity:
                 pipeline._run_one_iteration()
         mock_logger.debug.assert_called()
 
+    @pytest.mark.race
+    def test_run_one_iteration_publishes_when_queue_drained_between_full_check_and_get(
+        self, pipeline: DetectionPipeline
+    ) -> None:
+        q = pipeline.get_queue()
+        # Queue is actually empty, but full() reports True (TOCTOU race).
+        with patch.object(q, "full", side_effect=[True, False]):
+            with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
+                pipeline._run_one_iteration()
+
+        assert q.qsize() == 1
+        assert isinstance(q.get_nowait(), PipelineResult)
+
 
 class TestRunOneIterationFpsThrottle:
-    """7.9 Boundary Values — FPS throttle."""
+    """8.8 Boundary Values — FPS throttle."""
 
     @pytest.mark.unit
     def test_run_one_iteration_throttle_waits_when_too_fast(
@@ -862,7 +891,7 @@ class TestRunOneIterationFpsThrottle:
 
 
 class TestRunOneIterationConcurrentLock:
-    """7.10 Concurrent Behaviour — lock acquisition."""
+    """8.9 Concurrent Behaviour — lock acquisition."""
 
     @pytest.mark.race
     def test_run_one_iteration_releases_lock_before_detect(
@@ -870,15 +899,17 @@ class TestRunOneIterationConcurrentLock:
     ) -> None:
         call_order: list[str] = []
 
-        original_release = pipeline._config_lock.release
-
-        def recording_release():
-            call_order.append("release")
-            original_release()
+        # threading.Lock is a C extension type whose methods are read-only,
+        # so we replace the entire lock with a MagicMock that wraps it.
+        real_lock = pipeline._config_lock
+        mock_lock = MagicMock(wraps=real_lock)
+        mock_lock.release = MagicMock(side_effect=lambda: (call_order.append("release"), real_lock.release())[-1])
+        mock_lock.acquire = MagicMock(side_effect=lambda *a, **kw: real_lock.acquire(*a, **kw))
+        mock_lock.__enter__ = MagicMock(side_effect=lambda: real_lock.__enter__())
+        mock_lock.__exit__ = MagicMock(side_effect=lambda *a: (call_order.append("release"), real_lock.__exit__(*a))[-1])
+        pipeline._config_lock = mock_lock
 
         mock_engine.detect.side_effect = lambda *a, **kw: call_order.append("detect") or []
-
-        pipeline._config_lock.release = recording_release  # type: ignore[method-assign]
 
         with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
             pipeline._run_one_iteration()
@@ -904,17 +935,18 @@ class TestRunOneIterationConcurrentLock:
 
 
 class TestRunOneIterationNonBlockingQueue:
-    """7.11 Happy Path — queue method calls."""
+    """8.10 Happy Path — queue method calls."""
 
     @pytest.mark.unit
     def test_run_one_iteration_uses_put_nowait(self, pipeline: DetectionPipeline) -> None:
         q = pipeline.get_queue()
+        # Note: Queue.put_nowait() internally delegates to put(), so we cannot
+        # mock put() without breaking put_nowait(). Instead, just verify that
+        # put_nowait was the entry point used by the production code.
         with patch.object(q, "put_nowait", wraps=q.put_nowait) as mock_put_nowait:
-            with patch.object(q, "put") as mock_put:
-                with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
-                    pipeline._run_one_iteration()
+            with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
+                pipeline._run_one_iteration()
         mock_put_nowait.assert_called_once()
-        mock_put.assert_not_called()
 
     @pytest.mark.unit
     def test_run_one_iteration_uses_get_nowait_on_full_queue(self, pipeline: DetectionPipeline) -> None:
@@ -922,21 +954,22 @@ class TestRunOneIterationNonBlockingQueue:
         for _ in range(5):
             q.put_nowait(object())
 
+        # Note: Queue.get_nowait() internally delegates to get(), so we cannot
+        # mock get() without preventing actual item removal (causing queue.Full).
+        # Instead, just verify that get_nowait was the entry point used.
         with patch.object(q, "get_nowait", wraps=q.get_nowait) as mock_get_nowait:
-            with patch.object(q, "get") as mock_get:
-                with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
-                    pipeline._run_one_iteration()
+            with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
+                pipeline._run_one_iteration()
         mock_get_nowait.assert_called_once()
-        mock_get.assert_not_called()
 
 
 # ===========================================================================
-# Section 8 — End-to-End: FPS Cap
+# Section 9 — End-to-End: FPS Cap
 # ===========================================================================
 
 
 class TestFpsCap:
-    """8.1 Boundary Values — output rate."""
+    """9.1 Boundary Values — output rate."""
 
     @pytest.mark.e2e
     def test_fps_cap_output_rate_does_not_exceed_30(
@@ -969,12 +1002,12 @@ class TestFpsCap:
 
 
 # ===========================================================================
-# Section 9 — Concurrency: update_config Stress Test
+# Section 10 — Concurrency: update_config Stress Test
 # ===========================================================================
 
 
 class TestUpdateConfigConcurrent:
-    """9.1 Concurrent Behaviour."""
+    """10.1 Concurrent Behaviour."""
 
     @pytest.mark.race
     def test_update_config_concurrent_no_exception(self, pipeline: DetectionPipeline) -> None:
@@ -1041,12 +1074,12 @@ class TestUpdateConfigConcurrent:
 
 
 # ===========================================================================
-# Section 10 — Concurrency: stop() Interrupts Frame Loop
+# Section 11 — Concurrency: stop() Interrupts Frame Loop
 # ===========================================================================
 
 
 class TestStopInterruptsFrameLoop:
-    """10.1 Concurrent Behaviour."""
+    """11.1 Concurrent Behaviour."""
 
     @pytest.mark.race
     def test_stop_from_separate_thread_joins_cleanly(self, pipeline: DetectionPipeline) -> None:
@@ -1090,12 +1123,12 @@ class TestStopInterruptsFrameLoop:
 
 
 # ===========================================================================
-# Section 11 — End-to-End: Recovery from Initial DeviceNotFoundError
+# Section 12 — End-to-End: Recovery from Initial DeviceNotFoundError
 # ===========================================================================
 
 
 class TestRecoveryFromInitFailure:
-    """11.1 State Transitions."""
+    """12.1 State Transitions."""
 
     @pytest.mark.e2e
     def test_recovery_from_init_failure_produces_results(

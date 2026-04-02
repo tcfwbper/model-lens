@@ -15,17 +15,17 @@ An ADR is not a suggestion — it is a binding constraint until explicitly super
 | ID | Title | Status |
 |---|---|---|
 | [0001](0001_initial_toolchain.md) | Initial Python toolchain selection | Accepted |
-| [0002](0002_single_bundled_inference_engine.md) | Single bundled InferenceEngine | Accepted |
+| [0002](0002_single_bundled_inference_engine.md) | Single bundled InferenceEngine | Superseded |
 | [0003](0003_in_memory_config_only.md) | In-memory config only | Accepted |
 | [0004](0004_bundled_static_assets.md) | Bundled static assets | Accepted |
 | [0005](0005_sse_over_websocket.md) | SSE over WebSocket for the live stream | Accepted |
 | [0006](0006_config_applied_in_loop.md) | Config changes applied in-loop | Accepted |
 | [0007](0007_opencv_for_camera_sources.md) | OpenCV for both camera source types | Accepted |
 | [0008](0008_concurrency_and_thread_safety.md) | Concurrency and thread safety strategy | Accepted |
-| [0009](0009_frame_data_ownership_and_copy_strategy.md) | Frame data ownership and copy strategy | Accepted |
+| [0009](0009_frame_data_ownership_and_copy_strategy.md) | Frame data ownership and copy strategy | Accepted (colour-space clause superseded) |
 | [0010](0010_label_map_empty_line_handling.md) | Label map empty line handling | Accepted |
 | [0011](0011_retry_and_recovery_mechanism_design.md) | Retry and recovery mechanism design | Accepted |
-| [0012](0012_package_data_resource_resolution.md) | Package data resource resolution and fallback | Accepted |
+| [0012](0012_package_data_resource_resolution.md) | Package data resource resolution and fallback | Superseded |
 | [0013](0013_bounded_queue_drop_oldest_strategy.md) | Bounded result queue with drop-oldest eviction | Accepted |
 | [0014](0014_30fps_output_rate_cap.md) | 30 FPS output rate cap via sleep-based pacing | Accepted |
 | [0015](0015_jpeg_encoding_in_pipeline.md) | JPEG encoding inside the Detection Pipeline | Accepted |
@@ -36,6 +36,8 @@ An ADR is not a suggestion — it is a binding constraint until explicitly super
 | [0020](0020_pydantic_discriminated_union_for_camera_config.md) | Pydantic discriminated union for camera configuration | Accepted |
 | [0021](0021_stdlib_tomllib_for_config.md) | Standard library tomllib for configuration parsing | Accepted |
 | [0022](0022_custom_exception_hierarchy_and_single_string_message.md) | Custom exception hierarchy with single string message | Accepted |
+| [0023](0023_model_registry_and_yolo_backend.md) | Model registry and YOLOInferenceEngine as sole backend | Accepted |
+| [0024](0024_bgr_rgb_conversion_in_pipeline.md) | JPEG encoding directly from BGR frame.data; no colour conversion in pipeline | Accepted |
 
 ---
 
