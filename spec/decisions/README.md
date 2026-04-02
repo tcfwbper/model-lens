@@ -38,6 +38,8 @@ An ADR is not a suggestion — it is a binding constraint until explicitly super
 | [0022](0022_custom_exception_hierarchy_and_single_string_message.md) | Custom exception hierarchy with single string message | Accepted |
 | [0023](0023_model_registry_and_yolo_backend.md) | Model registry and YOLOInferenceEngine as sole backend | Accepted |
 | [0024](0024_bgr_rgb_conversion_in_pipeline.md) | JPEG encoding directly from BGR frame.data; no colour conversion in pipeline | Accepted |
+| [0025](0025_explicit_button_triggered_runtime_config_update.md) | RuntimeConfig updates triggered by explicit button click; single PUT per submission | Accepted |
+| [0026](0026_canvas_bounding_box_rendering.md) | Bounding box overlays rendered via HTML Canvas 2D API | Accepted |
 
 ---
 
