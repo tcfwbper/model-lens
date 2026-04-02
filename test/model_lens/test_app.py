@@ -92,15 +92,14 @@ def lifespan_mocks(tmp_path):
     (dist_dir / "static").mkdir()
 
     mock_config = MagicMock()
-    mock_config.model.model_path = "fake.pt"
+    mock_config.model.model = "fake.pt"
     mock_config.model.confidence_threshold = 0.5
-    mock_config.model.labels_path = "fake_labels.txt"
     mock_config.camera.source_type = "local"
     mock_config.camera.device_index = 0
 
     with (
         patch("model_lens.app.load", return_value=mock_config) as mock_load,
-        patch("model_lens.app.TorchInferenceEngine") as mock_engine_cls,
+        patch("model_lens.app.YOLOInferenceEngine") as mock_engine_cls,
         patch("model_lens.app.DetectionPipeline") as mock_pipeline_cls,
         patch("model_lens.app.resolve_dist_dir", return_value=dist_dir),
     ):
@@ -311,9 +310,8 @@ class TestLifespanStartup:
             pass
 
         lifespan_mocks["engine_cls"].assert_called_once_with(
-            model_path=lifespan_mocks["config"].model.model_path,
+            model=lifespan_mocks["config"].model.model,
             confidence_threshold=lifespan_mocks["config"].model.confidence_threshold,
-            labels_path=lifespan_mocks["config"].model.labels_path,
         )
 
     @pytest.mark.unit
@@ -365,7 +363,7 @@ class TestLifespanStartup:
         )
 
     @pytest.mark.unit
-    def test_lifespan_initial_runtime_config_target_labels_empty(
+    def test_lifespan_initial_runtime_config_target_labels_from_engine(
         self, lifespan_mocks
     ):
         from model_lens.app import create_app
@@ -383,7 +381,10 @@ class TestLifespanStartup:
                 break
 
         assert runtime_config is not None
-        assert runtime_config.target_labels == []
+        expected_labels = list(
+            lifespan_mocks["engine"].get_label_map.return_value.values()
+        )
+        assert runtime_config.target_labels == expected_labels
 
     @pytest.mark.unit
     def test_lifespan_pipeline_start_called(self, lifespan_mocks):

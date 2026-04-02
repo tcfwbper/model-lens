@@ -14,6 +14,8 @@
 
 """Tests for model_lens.routers.config."""
 
+from unittest.mock import MagicMock
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -103,7 +105,54 @@ class TestGetConfigRtsp:
         assert "device_index" not in body["camera"]
 
 
-# ---- 2. PUT /config/camera — Local ----
+# ---- 2. GET /config/labels ----
+
+
+@pytest.fixture
+def client_with_engine(client, mock_pipeline):
+    mock_engine = MagicMock()
+    mock_engine.get_label_map.return_value = {0: "person", 1: "bicycle", 2: "car"}
+    client.app.state.engine = mock_engine
+    return client, mock_engine
+
+
+class TestGetConfigLabels:
+    """Tests for GET /config/labels."""
+
+    @pytest.mark.unit
+    def test_get_labels_returns_200(self, client_with_engine):
+        client, _ = client_with_engine
+        response = client.get("/config/labels")
+        assert response.status_code == 200
+
+    @pytest.mark.unit
+    def test_get_labels_response_shape(self, client_with_engine):
+        client, _ = client_with_engine
+        body = client.get("/config/labels").json()
+        assert "valid_labels" in body
+        assert isinstance(body["valid_labels"], list)
+
+    @pytest.mark.unit
+    def test_get_labels_values_match_engine_label_map(self, client_with_engine):
+        client, _ = client_with_engine
+        body = client.get("/config/labels").json()
+        assert body["valid_labels"] == ["person", "bicycle", "car"]
+
+    @pytest.mark.unit
+    def test_get_labels_calls_get_label_map(self, client_with_engine):
+        client, mock_engine = client_with_engine
+        client.get("/config/labels")
+        assert mock_engine.get_label_map.call_count == 1
+
+    @pytest.mark.unit
+    def test_get_labels_empty_label_map(self, client_with_engine):
+        client, mock_engine = client_with_engine
+        mock_engine.get_label_map.return_value = {}
+        body = client.get("/config/labels").json()
+        assert body["valid_labels"] == []
+
+
+# ---- 3. PUT /config/camera — Local ----
 
 
 class TestPutCameraLocal:
@@ -187,7 +236,7 @@ class TestPutCameraLocal:
         assert config.confidence_threshold == 0.75
 
 
-# ---- 2.2 PUT /config/camera — RTSP ----
+# ---- 3.2 PUT /config/camera — RTSP ----
 
 
 class TestPutCameraRtsp:
@@ -244,7 +293,7 @@ class TestPutCameraRtsp:
         assert body["camera"]["rtsp_url"] == "rtsp://192.168.1.10/stream"
 
 
-# ---- 2.3 PUT /config/camera — Validation Failures ----
+# ---- 3.3 PUT /config/camera — Validation Failures ----
 
 
 class TestPutCameraValidation:
@@ -323,7 +372,7 @@ class TestPutCameraValidation:
         assert response.status_code == 200
 
 
-# ---- 3. PUT /config/labels — Happy Path ----
+# ---- 4. PUT /config/labels — Happy Path ----
 
 
 class TestPutLabels:
@@ -397,7 +446,7 @@ class TestPutLabels:
         assert config.confidence_threshold == 0.75
 
 
-# ---- 3.2 PUT /config/labels — Validation Failures ----
+# ---- 4.2 PUT /config/labels — Validation Failures ----
 
 
 class TestPutLabelsValidation:

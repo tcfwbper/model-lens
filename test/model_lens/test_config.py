@@ -14,7 +14,6 @@
 
 """Tests for src/model_lens/config.py."""
 
-import os
 import sys
 from dataclasses import FrozenInstanceError
 from pathlib import Path
@@ -175,15 +174,9 @@ def test_config_camera_config_rtsp_url_is_immutable() -> None:
 
 
 @pytest.mark.unit
-def test_model_config_default_model_path() -> None:
-    """Default model path is ''."""
-    assert ModelConfig().model_path == ""
-
-
-@pytest.mark.unit
-def test_model_config_default_labels_path() -> None:
-    """Default labels path is ''."""
-    assert ModelConfig().labels_path == ""
+def test_model_config_default_model() -> None:
+    """Default model name is 'yolov8n'."""
+    assert ModelConfig().model == "yolov8n"
 
 
 @pytest.mark.unit
@@ -193,40 +186,25 @@ def test_model_config_default_confidence_threshold() -> None:
 
 
 @pytest.mark.unit
-def test_model_config_explicit_model_path() -> None:
-    """Custom model path is stored."""
-    instance = ModelConfig(model_path="/a/b/model.tflite", labels_path="/a/b/labels.txt", confidence_threshold=0.5)
-    assert instance.model_path == "/a/b/model.tflite"
-
-
-@pytest.mark.unit
-def test_model_config_explicit_labels_path() -> None:
-    """Custom labels path is stored."""
-    instance = ModelConfig(model_path="/a/b/model.tflite", labels_path="/a/b/labels.txt", confidence_threshold=0.5)
-    assert instance.labels_path == "/a/b/labels.txt"
+def test_model_config_explicit_model() -> None:
+    """Custom model name is stored."""
+    instance = ModelConfig(model="yolov8s", confidence_threshold=0.5)
+    assert instance.model == "yolov8s"
 
 
 @pytest.mark.unit
 def test_model_config_explicit_confidence_threshold() -> None:
     """Custom confidence threshold is stored."""
-    instance = ModelConfig(model_path="/a/b/model.tflite", labels_path="/a/b/labels.txt", confidence_threshold=0.9)
+    instance = ModelConfig(model="yolov8n", confidence_threshold=0.9)
     assert instance.confidence_threshold == 0.9
 
 
 @pytest.mark.unit
-def test_model_config_model_path_is_immutable() -> None:
-    """Assigning to model_path raises FrozenInstanceError."""
+def test_model_config_model_is_immutable() -> None:
+    """Assigning to model raises FrozenInstanceError."""
     instance = ModelConfig()
     with pytest.raises(FrozenInstanceError):
-        instance.model_path = "/new"  # type: ignore[misc]
-
-
-@pytest.mark.unit
-def test_model_config_labels_path_is_immutable() -> None:
-    """Assigning to labels_path raises FrozenInstanceError."""
-    instance = ModelConfig()
-    with pytest.raises(FrozenInstanceError):
-        instance.labels_path = "/new"  # type: ignore[misc]
+        instance.model = "yolov8s"  # type: ignore[misc]
 
 
 @pytest.mark.unit
@@ -243,39 +221,36 @@ def test_model_config_confidence_threshold_is_immutable() -> None:
 
 
 @pytest.mark.unit
-def test_app_config_stores_server(bundled_paths: tuple[Path, Path]) -> None:
+def test_app_config_stores_server() -> None:
     """server field is stored correctly."""
-    model_file, labels_file = bundled_paths
     server = ServerConfig()
     instance = AppConfig(
         server=server,
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     assert instance.server == server
 
 
 @pytest.mark.unit
-def test_app_config_stores_camera(bundled_paths: tuple[Path, Path]) -> None:
+def test_app_config_stores_camera() -> None:
     """camera field is stored correctly."""
-    model_file, labels_file = bundled_paths
     camera = CameraConfig()
     instance = AppConfig(
         server=ServerConfig(),
         camera=camera,
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     assert instance.camera == camera
 
 
 @pytest.mark.unit
-def test_app_config_stores_model(bundled_paths: tuple[Path, Path]) -> None:
+def test_app_config_stores_model() -> None:
     """model field is stored correctly."""
-    model_file, labels_file = bundled_paths
     instance = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     assert instance.model.confidence_threshold == 0.5
 
@@ -316,13 +291,12 @@ def test_validate_valid_config_returns_none(valid_app_config: AppConfig) -> None
 
 
 @pytest.mark.unit
-def test_validate_server_host_empty_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_host_empty_raises() -> None:
     """Empty host raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="", port=8080, log_level="info"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     with pytest.raises(ConfigurationError, match="server.host must be non-empty"):
         validate(cfg)
@@ -332,64 +306,59 @@ def test_validate_server_host_empty_raises(bundled_paths: tuple[Path, Path]) -> 
 
 
 @pytest.mark.unit
-def test_validate_server_port_zero_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_port_zero_raises() -> None:
     """Port 0 raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="0.0.0.0", port=0, log_level="info"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     with pytest.raises(ConfigurationError, match="server.port must be between 1 and 65535, got 0"):
         validate(cfg)
 
 
 @pytest.mark.unit
-def test_validate_server_port_negative_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_port_negative_raises() -> None:
     """Negative port raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="0.0.0.0", port=-1, log_level="info"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     with pytest.raises(ConfigurationError, match="server.port must be between 1 and 65535, got -1"):
         validate(cfg)
 
 
 @pytest.mark.unit
-def test_validate_server_port_above_max_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_port_above_max_raises() -> None:
     """Port 65536 raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="0.0.0.0", port=65536, log_level="info"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     with pytest.raises(ConfigurationError, match="server.port must be between 1 and 65535, got 65536"):
         validate(cfg)
 
 
 @pytest.mark.unit
-def test_validate_server_port_min_boundary_valid(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_port_min_boundary_valid() -> None:
     """Port 1 is valid."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="0.0.0.0", port=1, log_level="info"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     validate(cfg)  # must not raise
 
 
 @pytest.mark.unit
-def test_validate_server_port_max_boundary_valid(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_port_max_boundary_valid() -> None:
     """Port 65535 is valid."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="0.0.0.0", port=65535, log_level="info"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     validate(cfg)  # must not raise
 
@@ -398,13 +367,12 @@ def test_validate_server_port_max_boundary_valid(bundled_paths: tuple[Path, Path
 
 
 @pytest.mark.unit
-def test_validate_server_log_level_invalid_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_log_level_invalid_raises() -> None:
     """Unknown log level raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="0.0.0.0", port=8080, log_level="verbose"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     with pytest.raises(
         ConfigurationError,
@@ -414,49 +382,45 @@ def test_validate_server_log_level_invalid_raises(bundled_paths: tuple[Path, Pat
 
 
 @pytest.mark.unit
-def test_validate_server_log_level_debug_valid(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_log_level_debug_valid() -> None:
     """'debug' is a valid log level."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="0.0.0.0", port=8080, log_level="debug"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     validate(cfg)  # must not raise
 
 
 @pytest.mark.unit
-def test_validate_server_log_level_warning_valid(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_log_level_warning_valid() -> None:
     """'warning' is a valid log level."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="0.0.0.0", port=8080, log_level="warning"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     validate(cfg)  # must not raise
 
 
 @pytest.mark.unit
-def test_validate_server_log_level_error_valid(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_log_level_error_valid() -> None:
     """'error' is a valid log level."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="0.0.0.0", port=8080, log_level="error"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     validate(cfg)  # must not raise
 
 
 @pytest.mark.unit
-def test_validate_server_log_level_critical_valid(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_server_log_level_critical_valid() -> None:
     """'critical' is a valid log level."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(host="0.0.0.0", port=8080, log_level="critical"),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     validate(cfg)  # must not raise
 
@@ -465,13 +429,12 @@ def test_validate_server_log_level_critical_valid(bundled_paths: tuple[Path, Pat
 
 
 @pytest.mark.unit
-def test_validate_camera_source_type_invalid_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_camera_source_type_invalid_raises() -> None:
     """Unknown source type raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(source_type="usb", device_index=0, rtsp_url=""),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     with pytest.raises(
         ConfigurationError,
@@ -484,26 +447,24 @@ def test_validate_camera_source_type_invalid_raises(bundled_paths: tuple[Path, P
 
 
 @pytest.mark.unit
-def test_validate_camera_device_index_negative_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_camera_device_index_negative_raises() -> None:
     """Negative device index raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(source_type="local", device_index=-1, rtsp_url=""),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     with pytest.raises(ConfigurationError, match="camera.device_index must be >= 0, got -1"):
         validate(cfg)
 
 
 @pytest.mark.unit
-def test_validate_camera_device_index_zero_valid(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_camera_device_index_zero_valid() -> None:
     """Device index 0 is valid."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(source_type="local", device_index=0, rtsp_url=""),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     validate(cfg)  # must not raise
 
@@ -512,13 +473,12 @@ def test_validate_camera_device_index_zero_valid(bundled_paths: tuple[Path, Path
 
 
 @pytest.mark.unit
-def test_validate_camera_rtsp_url_empty_when_rtsp_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_camera_rtsp_url_empty_when_rtsp_raises() -> None:
     """Empty RTSP URL with source_type='rtsp' raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(source_type="rtsp", device_index=0, rtsp_url=""),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     with pytest.raises(
         ConfigurationError,
@@ -528,100 +488,41 @@ def test_validate_camera_rtsp_url_empty_when_rtsp_raises(bundled_paths: tuple[Pa
 
 
 @pytest.mark.unit
-def test_validate_camera_rtsp_url_empty_when_local_valid(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_camera_rtsp_url_empty_when_local_valid() -> None:
     """Empty RTSP URL with source_type='local' is valid."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(source_type="local", device_index=0, rtsp_url=""),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.5),
     )
     validate(cfg)  # must not raise
 
 
-# --- 5.8 model.model_path ---
+# --- 5.8 model.model ---
 
 
 @pytest.mark.unit
-def test_validate_model_path_empty_raises(bundled_paths: tuple[Path, Path]) -> None:
-    """Empty model path raises ConfigurationError."""
-    _, labels_file = bundled_paths
+def test_validate_model_path_empty_raises() -> None:
+    """Empty model name raises ConfigurationError."""
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(),
-        model=ModelConfig(model_path="", labels_path=str(labels_file), confidence_threshold=0.5),
+        model=ModelConfig(model="", confidence_threshold=0.5),
     )
-    with pytest.raises(ConfigurationError, match="model.model_path must be non-empty"):
+    with pytest.raises(ConfigurationError, match="model.model must be non-empty"):
         validate(cfg)
 
 
-@pytest.mark.unit
-def test_validate_model_path_not_exist_raises(bundled_paths: tuple[Path, Path]) -> None:
-    """Non-existent model path raises ConfigurationError."""
-    _, labels_file = bundled_paths
-    cfg = AppConfig(
-        server=ServerConfig(),
-        camera=CameraConfig(),
-        model=ModelConfig(
-            model_path="/nonexistent/model.tflite",
-            labels_path=str(labels_file),
-            confidence_threshold=0.5,
-        ),
-    )
-    with pytest.raises(
-        ConfigurationError,
-        match='model.model_path does not exist: "/nonexistent/model.tflite"',
-    ):
-        validate(cfg)
-
-
-# --- 5.9 model.labels_path ---
+# --- 5.9 model.confidence_threshold ---
 
 
 @pytest.mark.unit
-def test_validate_labels_path_empty_raises(bundled_paths: tuple[Path, Path]) -> None:
-    """Empty labels path raises ConfigurationError."""
-    model_file, _ = bundled_paths
-    cfg = AppConfig(
-        server=ServerConfig(),
-        camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path="", confidence_threshold=0.5),
-    )
-    with pytest.raises(ConfigurationError, match="model.labels_path must be non-empty"):
-        validate(cfg)
-
-
-@pytest.mark.unit
-def test_validate_labels_path_not_exist_raises(bundled_paths: tuple[Path, Path]) -> None:
-    """Non-existent labels path raises ConfigurationError."""
-    model_file, _ = bundled_paths
-    cfg = AppConfig(
-        server=ServerConfig(),
-        camera=CameraConfig(),
-        model=ModelConfig(
-            model_path=str(model_file),
-            labels_path="/nonexistent/labels.txt",
-            confidence_threshold=0.5,
-        ),
-    )
-    with pytest.raises(
-        ConfigurationError,
-        match='model.labels_path does not exist: "/nonexistent/labels.txt"',
-    ):
-        validate(cfg)
-
-
-# --- 5.10 model.confidence_threshold ---
-
-
-@pytest.mark.unit
-def test_validate_confidence_threshold_zero_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_confidence_threshold_zero_raises() -> None:
     """Threshold 0.0 raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.0),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.0),
     )
     with pytest.raises(
         ConfigurationError,
@@ -631,13 +532,12 @@ def test_validate_confidence_threshold_zero_raises(bundled_paths: tuple[Path, Pa
 
 
 @pytest.mark.unit
-def test_validate_confidence_threshold_negative_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_confidence_threshold_negative_raises() -> None:
     """Negative threshold raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=-0.1),
+        model=ModelConfig(model="yolov8n", confidence_threshold=-0.1),
     )
     with pytest.raises(
         ConfigurationError,
@@ -647,13 +547,12 @@ def test_validate_confidence_threshold_negative_raises(bundled_paths: tuple[Path
 
 
 @pytest.mark.unit
-def test_validate_confidence_threshold_above_one_raises(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_confidence_threshold_above_one_raises() -> None:
     """Threshold 1.5 raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=1.5),
+        model=ModelConfig(model="yolov8n", confidence_threshold=1.5),
     )
     with pytest.raises(
         ConfigurationError,
@@ -663,25 +562,23 @@ def test_validate_confidence_threshold_above_one_raises(bundled_paths: tuple[Pat
 
 
 @pytest.mark.unit
-def test_validate_confidence_threshold_min_boundary_valid(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_confidence_threshold_min_boundary_valid() -> None:
     """Threshold just above 0.0 (0.01) is valid."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=0.01),
+        model=ModelConfig(model="yolov8n", confidence_threshold=0.01),
     )
     validate(cfg)  # must not raise
 
 
 @pytest.mark.unit
-def test_validate_confidence_threshold_max_boundary_valid(bundled_paths: tuple[Path, Path]) -> None:
+def test_validate_confidence_threshold_max_boundary_valid() -> None:
     """Threshold exactly 1.0 is valid."""
-    model_file, labels_file = bundled_paths
     cfg = AppConfig(
         server=ServerConfig(),
         camera=CameraConfig(),
-        model=ModelConfig(model_path=str(model_file), labels_path=str(labels_file), confidence_threshold=1.0),
+        model=ModelConfig(model="yolov8n", confidence_threshold=1.0),
     )
     validate(cfg)  # must not raise
 
@@ -708,38 +605,6 @@ def _assert_log_call(mock_method: MagicMock, *expected_substrings: str) -> None:
     )
 
 
-def _make_importlib_resources_mock(model_path: str, labels_path: str) -> MagicMock:
-    """Build a mock for importlib.resources that returns the given paths.
-
-    Args:
-        model_path: The string path to return for the model file.
-        labels_path: The string path to return for the labels file.
-
-    Returns:
-        A MagicMock configured to stand in for importlib.resources.files().
-    """
-    mock_resources = MagicMock()
-
-    def _files_side_effect(package: str) -> MagicMock:
-        pkg_mock = MagicMock()
-
-        def _joinpath_side_effect(filename: str) -> MagicMock:
-            path_mock = MagicMock()
-            if "model" in filename or filename.endswith(".tflite"):
-                path_mock.__str__ = lambda self: model_path
-                path_mock.is_file.return_value = True
-            else:
-                path_mock.__str__ = lambda self: labels_path
-                path_mock.is_file.return_value = True
-            return path_mock
-
-        pkg_mock.joinpath.side_effect = _joinpath_side_effect
-        return pkg_mock
-
-    mock_resources.files.side_effect = _files_side_effect
-    return mock_resources
-
-
 # --- 6.1 No config file — uses defaults ---
 
 
@@ -747,16 +612,12 @@ def _make_importlib_resources_mock(model_path: str, labels_path: str) -> MagicMo
 def test_load_no_config_file_uses_defaults(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """When no --config flag and no model_lens.toml in cwd, built-in defaults are used."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
+    cfg = load()
 
     assert cfg.server.port == 8080
 
@@ -765,17 +626,12 @@ def test_load_no_config_file_uses_defaults(
 def test_load_no_config_file_logs_warning(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """Warning is logged when no config file is found."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
-    with patch("model_lens.config.importlib.resources") as mock_res, patch(
-        "model_lens.config.logger"
-    ) as mock_logger:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
+    with patch("model_lens.config.logger") as mock_logger:
         load()
 
     mock_logger.warning.assert_called_once_with("No config file found; using built-in defaults.")
@@ -788,18 +644,13 @@ def test_load_no_config_file_logs_warning(
 def test_load_default_config_file_discovered(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """model_lens.toml in cwd is loaded automatically."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
     config_file = tmp_path / "model_lens.toml"
-    config_file.write_text(
-        f'[server]\nport = 7777\n[model]\nmodel_path = "{model_file}"\nlabels_path = "{labels_file}"\n'
-        f"confidence_threshold = 0.5\n"
-    )
+    config_file.write_text("[server]\nport = 7777\n")
 
     cfg = load()
     assert cfg.server.port == 7777
@@ -809,17 +660,13 @@ def test_load_default_config_file_discovered(
 def test_load_default_config_file_logs_info(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """Info is logged when config file is found."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
     config_file = tmp_path / "model_lens.toml"
-    config_file.write_text(
-        f'[model]\nmodel_path = "{model_file}"\nlabels_path = "{labels_file}"\nconfidence_threshold = 0.5\n'
-    )
+    config_file.write_text("[server]\nport = 8080\n")
 
     with patch("model_lens.config.logger") as mock_logger:
         load()
@@ -834,17 +681,12 @@ def test_load_default_config_file_logs_info(
 def test_load_explicit_config_flag_loads_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """--config path is loaded."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
 
     config_file = tmp_path / "custom.toml"
-    config_file.write_text(
-        f'[server]\nport = 6543\n[model]\nmodel_path = "{model_file}"\nlabels_path = "{labels_file}"\n'
-        f"confidence_threshold = 0.5\n"
-    )
+    config_file.write_text("[server]\nport = 6543\n")
     monkeypatch.setattr(sys, "argv", ["prog", "--config", str(config_file)])
 
     cfg = load()
@@ -855,16 +697,12 @@ def test_load_explicit_config_flag_loads_file(
 def test_load_explicit_config_flag_logs_info(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """Info is logged for explicit config path."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
 
     config_file = tmp_path / "custom.toml"
-    config_file.write_text(
-        f'[model]\nmodel_path = "{model_file}"\nlabels_path = "{labels_file}"\nconfidence_threshold = 0.5\n'
-    )
+    config_file.write_text("[server]\nport = 8080\n")
     monkeypatch.setattr(sys, "argv", ["prog", "--config", str(config_file)])
 
     with patch("model_lens.config.logger") as mock_logger:
@@ -880,18 +718,13 @@ def test_load_explicit_config_flag_logs_info(
 def test_load_toml_overrides_server_port(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """TOML [server] port = 9090 overrides default."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
     config_file = tmp_path / "model_lens.toml"
-    config_file.write_text(
-        f'[server]\nport = 9090\n[model]\nmodel_path = "{model_file}"\nlabels_path = "{labels_file}"\n'
-        f"confidence_threshold = 0.5\n"
-    )
+    config_file.write_text("[server]\nport = 9090\n")
 
     cfg = load()
     assert cfg.server.port == 9090
@@ -901,17 +734,14 @@ def test_load_toml_overrides_server_port(
 def test_load_toml_overrides_camera_source_type(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """TOML [camera] source_type = 'rtsp' overrides default."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
     config_file = tmp_path / "model_lens.toml"
     config_file.write_text(
-        f'[camera]\nsource_type = "rtsp"\nrtsp_url = "rtsp://host/s"\n'
-        f'[model]\nmodel_path = "{model_file}"\nlabels_path = "{labels_file}"\nconfidence_threshold = 0.5\n'
+        '[camera]\nsource_type = "rtsp"\nrtsp_url = "rtsp://host/s"\n'
     )
 
     cfg = load()
@@ -922,17 +752,13 @@ def test_load_toml_overrides_camera_source_type(
 def test_load_toml_overrides_confidence_threshold(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """TOML [model] confidence_threshold = 0.8 overrides default."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
     config_file = tmp_path / "model_lens.toml"
-    config_file.write_text(
-        f'[model]\nmodel_path = "{model_file}"\nlabels_path = "{labels_file}"\nconfidence_threshold = 0.8\n'
-    )
+    config_file.write_text("[model]\nconfidence_threshold = 0.8\n")
 
     cfg = load()
     assert cfg.model.confidence_threshold == 0.8
@@ -942,18 +768,13 @@ def test_load_toml_overrides_confidence_threshold(
 def test_load_toml_unknown_keys_ignored(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """Unknown TOML keys do not raise."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
     config_file = tmp_path / "model_lens.toml"
-    config_file.write_text(
-        f'[server]\nunknown_key = "x"\n'
-        f'[model]\nmodel_path = "{model_file}"\nlabels_path = "{labels_file}"\nconfidence_threshold = 0.5\n'
-    )
+    config_file.write_text('[server]\nunknown_key = "x"\n')
 
     load()  # must not raise
 
@@ -962,18 +783,13 @@ def test_load_toml_unknown_keys_ignored(
 def test_load_toml_missing_keys_retain_defaults(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """Keys absent from TOML retain built-in defaults."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
     config_file = tmp_path / "model_lens.toml"
-    config_file.write_text(
-        f'[server]\nport = 9090\n'
-        f'[model]\nmodel_path = "{model_file}"\nlabels_path = "{labels_file}"\nconfidence_threshold = 0.5\n'
-    )
+    config_file.write_text("[server]\nport = 9090\n")
 
     cfg = load()
     assert cfg.server.host == "0.0.0.0"
@@ -1003,45 +819,17 @@ def test_load_invalid_toml_raises(
 # ---------------------------------------------------------------------------
 
 
-def _configure_resources_mock(mock_res: MagicMock, model_path: str, labels_path: str) -> None:
-    """Configure a mock for importlib.resources to return the given paths.
-
-    Args:
-        mock_res: The MagicMock to configure.
-        model_path: The string path to return for the model file.
-        labels_path: The string path to return for the labels file.
-    """
-    pkg_mock = MagicMock()
-
-    def _joinpath(filename: str) -> MagicMock:
-        path_mock = MagicMock()
-        if "model" in filename or filename.endswith(".tflite"):
-            path_mock.__str__ = lambda self: model_path
-            path_mock.is_file.return_value = True
-        else:
-            path_mock.__str__ = lambda self: labels_path
-            path_mock.is_file.return_value = True
-        return path_mock
-
-    pkg_mock.joinpath.side_effect = _joinpath
-    mock_res.files.return_value = pkg_mock
-
-
 @pytest.mark.unit
 def test_load_env_override_server_host(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """ML_SERVER_HOST overrides host."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_SERVER_HOST", "192.168.0.1")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
+    cfg = load()
 
     assert cfg.server.host == "192.168.0.1"
 
@@ -1050,17 +838,13 @@ def test_load_env_override_server_host(
 def test_load_env_override_server_port(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """ML_SERVER_PORT overrides port."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_SERVER_PORT", "9999")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
+    cfg = load()
 
     assert cfg.server.port == 9999
 
@@ -1069,17 +853,13 @@ def test_load_env_override_server_port(
 def test_load_env_override_server_log_level(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """ML_SERVER_LOG_LEVEL overrides log level."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_SERVER_LOG_LEVEL", "debug")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
+    cfg = load()
 
     assert cfg.server.log_level == "debug"
 
@@ -1088,18 +868,14 @@ def test_load_env_override_server_log_level(
 def test_load_env_override_camera_source_type(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """ML_CAMERA_SOURCE_TYPE overrides source type."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_CAMERA_SOURCE_TYPE", "rtsp")
     monkeypatch.setenv("ML_CAMERA_RTSP_URL", "rtsp://h/s")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
+    cfg = load()
 
     assert cfg.camera.source_type == "rtsp"
 
@@ -1108,17 +884,13 @@ def test_load_env_override_camera_source_type(
 def test_load_env_override_camera_device_index(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """ML_CAMERA_DEVICE_INDEX overrides device index."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_CAMERA_DEVICE_INDEX", "2")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
+    cfg = load()
 
     assert cfg.camera.device_index == 2
 
@@ -1127,77 +899,44 @@ def test_load_env_override_camera_device_index(
 def test_load_env_override_camera_rtsp_url(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """ML_CAMERA_RTSP_URL overrides RTSP URL."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_CAMERA_SOURCE_TYPE", "rtsp")
     monkeypatch.setenv("ML_CAMERA_RTSP_URL", "rtsp://cam/live")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
+    cfg = load()
 
     assert cfg.camera.rtsp_url == "rtsp://cam/live"
 
 
 @pytest.mark.unit
-def test_load_env_override_model_model_path(
+def test_load_env_override_model_model(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
-    """ML_MODEL_MODEL_PATH overrides model path."""
-    model_file, labels_file = bundled_paths
+    """ML_MODEL_MODEL overrides model name."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
-    monkeypatch.setenv("ML_MODEL_MODEL_PATH", str(model_file))
-    monkeypatch.setenv("ML_MODEL_LABELS_PATH", str(labels_file))
+    monkeypatch.setenv("ML_MODEL_MODEL", "yolov8s")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
+    cfg = load()
 
-    assert cfg.model.model_path == str(model_file)
-
-
-@pytest.mark.unit
-def test_load_env_override_model_labels_path(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
-) -> None:
-    """ML_MODEL_LABELS_PATH overrides labels path."""
-    model_file, labels_file = bundled_paths
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["prog"])
-    monkeypatch.setenv("ML_MODEL_MODEL_PATH", str(model_file))
-    monkeypatch.setenv("ML_MODEL_LABELS_PATH", str(labels_file))
-
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
-
-    assert cfg.model.labels_path == str(labels_file)
+    assert cfg.model.model == "yolov8s"
 
 
 @pytest.mark.unit
 def test_load_env_override_model_confidence_threshold(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """ML_MODEL_CONFIDENCE_THRESHOLD overrides threshold."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_MODEL_CONFIDENCE_THRESHOLD", "0.75")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
+    cfg = load()
 
     assert cfg.model.confidence_threshold == 0.75
 
@@ -1206,18 +945,13 @@ def test_load_env_override_model_confidence_threshold(
 def test_load_env_override_logs_debug(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """Debug log is emitted for each env override applied."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_SERVER_PORT", "9999")
 
-    with patch("model_lens.config.importlib.resources") as mock_res, patch(
-        "model_lens.config.logger"
-    ) as mock_logger:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
+    with patch("model_lens.config.logger") as mock_logger:
         load()
 
     _assert_log_call(mock_logger.debug, "ML_SERVER_PORT", "9999", "server", "port")
@@ -1230,18 +964,14 @@ def test_load_env_override_logs_debug(
 def test_load_env_coercion_int_failure_raises(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """Non-integer value for an int field raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_SERVER_PORT", "abc")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        with pytest.raises(ConfigurationError) as exc_info:
-            load()
+    with pytest.raises(ConfigurationError) as exc_info:
+        load()
 
     message = str(exc_info.value)
     assert "ML_SERVER_PORT" in message
@@ -1253,18 +983,14 @@ def test_load_env_coercion_int_failure_raises(
 def test_load_env_coercion_float_failure_raises(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """Non-float value for a float field raises ConfigurationError."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_MODEL_CONFIDENCE_THRESHOLD", "xyz")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        with pytest.raises(ConfigurationError) as exc_info:
-            load()
+    with pytest.raises(ConfigurationError) as exc_info:
+        load()
 
     message = str(exc_info.value)
     assert "ML_MODEL_CONFIDENCE_THRESHOLD" in message
@@ -1276,171 +1002,19 @@ def test_load_env_coercion_float_failure_raises(
 def test_load_env_coercion_str_no_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """String env var is always accepted as-is."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_SERVER_HOST", "any-string")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
+    cfg = load()
 
     assert cfg.server.host == "any-string"
 
 
 # ---------------------------------------------------------------------------
-# 8. load() — Package-Data Path Resolution
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.unit
-def test_load_resolves_bundled_model_path_when_empty(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
-) -> None:
-    """Empty model_path is resolved to bundled path."""
-    model_file, labels_file = bundled_paths
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["prog"])
-
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
-
-    assert cfg.model.model_path == str(model_file)
-
-
-@pytest.mark.unit
-def test_load_resolves_bundled_labels_path_when_empty(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
-) -> None:
-    """Empty labels_path is resolved to bundled path."""
-    model_file, labels_file = bundled_paths
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["prog"])
-
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        cfg = load()
-
-    assert cfg.model.labels_path == str(labels_file)
-
-
-@pytest.mark.unit
-def test_load_skips_bundled_resolution_when_model_path_set(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
-) -> None:
-    """Non-empty model_path skips bundled resolution."""
-    model_file, labels_file = bundled_paths
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["prog"])
-    monkeypatch.setenv("ML_MODEL_MODEL_PATH", str(model_file))
-    monkeypatch.setenv("ML_MODEL_LABELS_PATH", str(labels_file))
-
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        load()
-        # resources.files should not have been called for model path resolution
-        for call_args in mock_res.files.call_args_list:
-            # If called at all, it must not be for model resolution
-            pass
-        # The key assertion: model_path was set via env, so bundled resolution was skipped
-        assert mock_res.files.call_count == 0
-
-
-@pytest.mark.unit
-def test_load_skips_bundled_resolution_when_labels_path_set(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
-) -> None:
-    """Non-empty labels_path skips bundled resolution."""
-    model_file, labels_file = bundled_paths
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["prog"])
-    monkeypatch.setenv("ML_MODEL_MODEL_PATH", str(model_file))
-    monkeypatch.setenv("ML_MODEL_LABELS_PATH", str(labels_file))
-
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        load()
-        assert mock_res.files.call_count == 0
-
-
-@pytest.mark.unit
-def test_load_bundled_resolution_logs_debug(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
-) -> None:
-    """Debug log is emitted when bundled path is resolved."""
-    model_file, labels_file = bundled_paths
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["prog"])
-
-    with patch("model_lens.config.importlib.resources") as mock_res, patch(
-        "model_lens.config.logger"
-    ) as mock_logger:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        load()
-
-    _assert_log_call(mock_logger.debug, "Resolved bundled model_path", str(model_file))
-
-
-# --- 8.2 Error propagation ---
-
-
-@pytest.mark.unit
-def test_load_bundled_model_path_not_found_raises(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
-) -> None:
-    """importlib.resources failure for model raises ConfigurationError."""
-    _, labels_file = bundled_paths
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["prog"])
-
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        pkg_mock = MagicMock()
-        pkg_mock.joinpath.side_effect = FileNotFoundError("not found")
-        mock_res.files.return_value = pkg_mock
-
-        with pytest.raises(ConfigurationError, match="Bundled model file could not be resolved from package data"):
-            load()
-
-
-@pytest.mark.unit
-def test_load_bundled_labels_path_not_found_raises(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
-) -> None:
-    """importlib.resources failure for labels raises ConfigurationError."""
-    model_file, _ = bundled_paths
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(sys, "argv", ["prog"])
-    monkeypatch.setenv("ML_MODEL_MODEL_PATH", str(model_file))
-
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        pkg_mock = MagicMock()
-        pkg_mock.joinpath.side_effect = FileNotFoundError("not found")
-        mock_res.files.return_value = pkg_mock
-
-        with pytest.raises(ConfigurationError, match="Bundled labels file could not be resolved from package data"):
-            load()
-
-
-# ---------------------------------------------------------------------------
-# 9. ConfigLoader
+# 8. ConfigLoader
 # ---------------------------------------------------------------------------
 
 
@@ -1454,16 +1028,12 @@ def test_config_loader_instantiation() -> None:
 def test_config_loader_load_returns_app_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """ConfigLoader().load() returns an AppConfig instance."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        result = ConfigLoader().load()
+    result = ConfigLoader().load()
 
     assert isinstance(result, AppConfig)
 
@@ -1472,16 +1042,12 @@ def test_config_loader_load_returns_app_config(
 def test_config_loader_load_uses_defaults_when_no_config_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """When no --config flag and no model_lens.toml in cwd, built-in defaults are used."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        result = ConfigLoader().load()
+    result = ConfigLoader().load()
 
     assert result.server.port == 8080
 
@@ -1490,18 +1056,14 @@ def test_config_loader_load_uses_defaults_when_no_config_file(
 def test_config_loader_load_raises_configuration_error_on_invalid_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    bundled_paths: tuple[Path, Path],
 ) -> None:
     """ConfigLoader().load() raises ConfigurationError when validation fails."""
-    model_file, labels_file = bundled_paths
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["prog"])
     monkeypatch.setenv("ML_SERVER_PORT", "0")
 
-    with patch("model_lens.config.importlib.resources") as mock_res:
-        _configure_resources_mock(mock_res, str(model_file), str(labels_file))
-        with pytest.raises(ConfigurationError):
-            ConfigLoader().load()
+    with pytest.raises(ConfigurationError):
+        ConfigLoader().load()
 
 
 @pytest.mark.unit

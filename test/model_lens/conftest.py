@@ -38,7 +38,5 @@ from fixtures.entities import (  # noqa: F401
     valid_frame_array,
 )
 from fixtures.inference_engine import (  # noqa: F401
-    dummy_model_file,
     engine_with_mock_model,
-    label_map_file,
 )

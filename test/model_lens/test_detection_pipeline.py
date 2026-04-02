@@ -530,56 +530,8 @@ class TestRunOneIterationHappyPath:
         assert args[1] == ["cat"]
 
 
-class TestRunOneIterationBgrToRgb:
-    """8.2 Happy Path — BGR→RGB Conversion."""
-
-    @pytest.mark.unit
-    def test_run_one_iteration_converts_bgr_to_rgb(
-        self, pipeline: DetectionPipeline, mock_camera: MagicMock
-    ) -> None:
-        bgr_data = np.zeros((480, 640, 3), dtype=np.uint8)
-        bgr_data[:, :, 0] = 10  # B channel
-        bgr_data[:, :, 1] = 20  # G channel
-        bgr_data[:, :, 2] = 30  # R channel
-        mock_camera.read.return_value = Frame(
-            data=bgr_data,
-            timestamp=1748000400.0,
-            source="local:0",
-        )
-
-        captured_args: list = []
-
-        def fake_imencode(ext, img, *args, **kwargs):
-            captured_args.append(img)
-            return (True, _make_mock_buffer())
-
-        with patch("cv2.imencode", side_effect=fake_imencode):
-            pipeline._run_one_iteration()
-
-        assert len(captured_args) == 1
-        encoded_img = captured_args[0]
-        # Channel 0 of the encoded image should equal channel 2 of the original BGR
-        assert np.array_equal(encoded_img[:, :, 0], bgr_data[:, :, 2])
-
-    @pytest.mark.unit
-    def test_run_one_iteration_does_not_modify_frame_data(
-        self, pipeline: DetectionPipeline, mock_camera: MagicMock
-    ) -> None:
-        bgr_data = np.zeros((480, 640, 3), dtype=np.uint8)
-        bgr_data[:, :, 0] = 10
-        original_channel_0 = bgr_data[:, :, 0].copy()
-        mock_camera.read.return_value = Frame(
-            data=bgr_data,
-            timestamp=1748000400.0,
-            source="local:0",
-        )
-        with patch("cv2.imencode", return_value=(True, _make_mock_buffer())):
-            pipeline._run_one_iteration()
-        assert np.array_equal(bgr_data[:, :, 0], original_channel_0)
-
-
 class TestRunOneIterationEncodeFailure:
-    """8.3 Error Propagation — JPEG Encoding."""
+    """8.2 Error Propagation — JPEG Encoding."""
 
     @pytest.mark.unit
     def test_run_one_iteration_skips_frame_on_encode_failure(self, pipeline: DetectionPipeline) -> None:
@@ -596,7 +548,7 @@ class TestRunOneIterationEncodeFailure:
 
 
 class TestRunOneIterationInferenceErrors:
-    """8.4 Error Propagation — Inference Engine."""
+    """8.3 Error Propagation — Inference Engine."""
 
     @pytest.mark.unit
     def test_run_one_iteration_skips_frame_on_operation_error(
@@ -640,7 +592,7 @@ class TestRunOneIterationInferenceErrors:
 
 
 class TestRunOneIterationCameraErrors:
-    """8.5 Error Propagation — Camera Capture."""
+    """8.4 Error Propagation — Camera Capture."""
 
     @pytest.mark.unit
     def test_run_one_iteration_clears_camera_on_operation_error(
@@ -689,7 +641,7 @@ class TestRunOneIterationCameraErrors:
 
 
 class TestRunOneIterationNoneCamera:
-    """8.6 None / Empty Input."""
+    """8.5 None / Empty Input."""
 
     @pytest.mark.unit
     def test_run_one_iteration_does_not_read_when_no_camera(
@@ -723,7 +675,7 @@ class TestRunOneIterationNoneCamera:
 
 
 class TestRunOneIterationStateTransitions:
-    """8.7 State Transitions."""
+    """8.6 State Transitions."""
 
     @pytest.mark.unit
     def test_run_one_iteration_recreates_local_camera_on_event(
@@ -827,7 +779,7 @@ class TestRunOneIterationStateTransitions:
 
 
 class TestRunOneIterationQueueCapacity:
-    """8.8 Boundary Values — queue capacity."""
+    """8.7 Boundary Values — queue capacity."""
 
     @pytest.mark.unit
     def test_run_one_iteration_drops_oldest_when_queue_full(
@@ -877,7 +829,7 @@ class TestRunOneIterationQueueCapacity:
 
 
 class TestRunOneIterationFpsThrottle:
-    """8.9 Boundary Values — FPS throttle."""
+    """8.8 Boundary Values — FPS throttle."""
 
     @pytest.mark.unit
     def test_run_one_iteration_throttle_waits_when_too_fast(
@@ -939,7 +891,7 @@ class TestRunOneIterationFpsThrottle:
 
 
 class TestRunOneIterationConcurrentLock:
-    """8.10 Concurrent Behaviour — lock acquisition."""
+    """8.9 Concurrent Behaviour — lock acquisition."""
 
     @pytest.mark.race
     def test_run_one_iteration_releases_lock_before_detect(
@@ -983,7 +935,7 @@ class TestRunOneIterationConcurrentLock:
 
 
 class TestRunOneIterationNonBlockingQueue:
-    """8.11 Happy Path — queue method calls."""
+    """8.10 Happy Path — queue method calls."""
 
     @pytest.mark.unit
     def test_run_one_iteration_uses_put_nowait(self, pipeline: DetectionPipeline) -> None:
