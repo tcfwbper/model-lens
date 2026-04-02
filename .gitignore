@@ -33,3 +33,15 @@ coverage.xml
 # Aider
 .aider*
 !.aider.instructions.md
+
+# Models
+*.pt
+*.pth
+*.torchscript
+*.onnx
+*.engine
+*.trt
+
+# Static Assets
+**/*/dist/
+**/*/build/
