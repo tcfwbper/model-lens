@@ -26,16 +26,13 @@ import threading
 
 import numpy as np
 from numpy.typing import NDArray
-from ultralytics import YOLO
-from ultralytics.engine.results import Results, Boxes
+from ultralytics import YOLO  # type: ignore[attr-defined]
+from ultralytics.engine.results import Results
 
 from model_lens.entities import DetectionResult
-from model_lens.exceptions import ConfigurationError, OperationError, ParseError
+from model_lens.exceptions import ConfigurationError, OperationError
 
 logger = logging.getLogger(__name__)
-
-#: Package name used for importlib.resources fallback resolution.
-_PACKAGE = "model_lens"
 
 
 class InferenceEngine(abc.ABC):
@@ -113,7 +110,7 @@ class YOLOInferenceEngine(InferenceEngine):
             return yolo_model
         except Exception as exc:
             raise OperationError(f"Failed to load model {model!r}: {exc}") from exc
-    
+
     def _get_label_map(self) -> dict[int, str]:
         """Get the label map from the loaded YOLO model."""
         if self._model is None:
@@ -148,24 +145,26 @@ class YOLOInferenceEngine(InferenceEngine):
 
             boxes = raw_results[0].boxes
 
-            for i in range(len(boxes)):
-                label: str = self._label_map[int(boxes.cls[i].item())]
-                confidence = float(boxes.conf[i].item())
-                h, w = frame.shape[:2]
-                x1, y1, x2, y2 = boxes.xyxy[i].tolist()
-                box = [x1 / w, y1 / h, x2 / w, y2 / h]  # normalised [0.0, 1.0]
+            if boxes:
+                for i in range(len(boxes)):
+                    label: str = self._label_map[int(boxes.cls[i].item())]
+                    confidence = float(boxes.conf[i].item())
+                    h, w = frame.shape[:2]
+                    x1, y1, x2, y2 = boxes.xyxy[i].tolist()
+                    x1, y1, x2, y2 = float(x1), float(y1), float(x2), float(y2)
+                    box = (x1 / w, y1 / h, x2 / w, y2 / h)  # normalised [0.0, 1.0]
 
-                if confidence < self._confidence_threshold:
-                    continue
+                    if confidence < self._confidence_threshold:
+                        continue
 
-                results.append(
-                    DetectionResult(
-                        label=label,
-                        confidence=confidence,
-                        bounding_box=box,
-                        is_target=(label in target_labels),
+                    results.append(
+                        DetectionResult(
+                            label=label,
+                            confidence=confidence,
+                            bounding_box=box,
+                            is_target=(label in target_labels),
+                        )
                     )
-                )
 
             results.sort(key=lambda r: r.confidence, reverse=True)
             return results
