@@ -151,7 +151,9 @@ class YOLOInferenceEngine(InferenceEngine):
             for i in range(len(boxes)):
                 label: str = self._label_map[int(boxes.cls[i].item())]
                 confidence = float(boxes.conf[i].item())
-                box = boxes.xyxy[i].tolist()  # [x1, y1, x2, y2]
+                h, w = frame.shape[:2]
+                x1, y1, x2, y2 = boxes.xyxy[i].tolist()
+                box = [x1 / w, y1 / h, x2 / w, y2 / h]  # normalised [0.0, 1.0]
 
                 if confidence < self._confidence_threshold:
                     continue

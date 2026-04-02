@@ -135,15 +135,27 @@ class TestDetectHappyPath:
     @pytest.mark.unit
     def test_detect_single_result_fields(self, engine_with_mock_model: YOLOInferenceEngine) -> None:
         """A single detection above threshold produces one DetectionResult with correct fields."""
+        # Pixel coords [64, 96, 256, 288] on a 640×480 frame normalise to [0.1, 0.2, 0.4, 0.6]
         engine_with_mock_model._model.return_value = _yolo_results(  # type: ignore[attr-defined]
-            [_det(index=0, confidence=0.9, box=[0.1, 0.2, 0.4, 0.6])]
+            [_det(index=0, confidence=0.9, box=[64.0, 96.0, 256.0, 288.0])]
         )
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         result = engine_with_mock_model.detect(frame, target_labels=[])
         assert len(result) == 1
         assert result[0].label == "person"
         assert result[0].confidence == pytest.approx(0.9)
-        assert result[0].bounding_box == [0.1, 0.2, 0.4, 0.6]
+        assert result[0].bounding_box == pytest.approx([0.1, 0.2, 0.4, 0.6])
+
+    @pytest.mark.unit
+    def test_detect_bounding_box_is_normalised(self, engine_with_mock_model: YOLOInferenceEngine) -> None:
+        """bounding_box coords are normalised to [0.0, 1.0] by dividing pixel xyxy by frame w/h."""
+        # Frame 400×200 (w=400, h=200); raw box [40, 20, 200, 100] → normalised [0.1, 0.1, 0.5, 0.5]
+        engine_with_mock_model._model.return_value = _yolo_results(  # type: ignore[attr-defined]
+            [_det(index=0, confidence=0.9, box=[40.0, 20.0, 200.0, 100.0])]
+        )
+        frame = np.zeros((200, 400, 3), dtype=np.uint8)
+        result = engine_with_mock_model.detect(frame, target_labels=[])
+        assert result[0].bounding_box == pytest.approx([0.1, 0.1, 0.5, 0.5])
 
     @pytest.mark.unit
     def test_detect_is_target_true(self, engine_with_mock_model: YOLOInferenceEngine) -> None:

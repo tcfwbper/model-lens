@@ -72,7 +72,8 @@ to return empty results by default. Used across sections 4–7.
 |---|---|---|---|---|
 | `test_detect_returns_list` | `unit` | `detect()` always returns a list | Mock model returns empty output | `isinstance(result, list) is True` |
 | `test_detect_empty_when_no_detections` | `unit` | No detections above threshold returns empty list | Mock model returns no raw detections | `result == []` |
-| `test_detect_single_result_fields` | `unit` | A single detection above threshold produces one `DetectionResult` with correct fields | Mock model returns one detection: index `0`, confidence `0.9`, box `[0.1, 0.2, 0.4, 0.6]` | `result[0].label == "person"`, `result[0].confidence == 0.9`, `result[0].bounding_box == [0.1, 0.2, 0.4, 0.6]` |
+| `test_detect_single_result_fields` | `unit` | A single detection above threshold produces one `DetectionResult` with correct fields | Mock model returns one detection: index `0`, confidence `0.9`, raw pixel box `[64.0, 96.0, 256.0, 288.0]`; frame is 640×480 | `result[0].label == "person"`, `result[0].confidence == 0.9`, `result[0].bounding_box == [0.1, 0.2, 0.4, 0.6]` (normalised) |
+| `test_detect_bounding_box_is_normalised` | `unit` | `bounding_box` values in `DetectionResult` are normalised to `[0.0, 1.0]` by dividing xyxy pixel coords by frame width/height | Frame 400×200 (`w=400, h=200`); raw pixel box `[40.0, 20.0, 200.0, 100.0]` | `result[0].bounding_box == pytest.approx([0.1, 0.1, 0.5, 0.5])` |
 | `test_detect_is_target_true` | `unit` | `is_target` is `True` when label is in `target_labels` | `target_labels=["person"]`; mock returns detection with label index `0` (`"person"`) | `result[0].is_target is True` |
 | `test_detect_is_target_false` | `unit` | `is_target` is `False` when label is not in `target_labels` | `target_labels=[]`; mock returns detection with label index `0` (`"person"`) | `result[0].is_target is False` |
 | `test_detect_does_not_mutate_frame` | `unit` | `detect()` does not modify the input frame array | Pass a `numpy.ndarray` frame; record a copy before the call; call `detect()`; compare after | `numpy.array_equal(frame_before, frame_after) is True` |
@@ -171,7 +172,7 @@ to return empty results by default. Used across sections 4–7.
 |---|---|---|---|---|---|
 | `YOLOInferenceEngine.__init__` (confidence_threshold) | 5 | 5 | 0 | 0 | zero, negative, above one, upper boundary, just above zero |
 | `YOLOInferenceEngine.__init__` (model loading) | 2 | 2 | 0 | 0 | successful load, load failure → OperationError |
-| `YOLOInferenceEngine.detect()` (happy path) | 7 | 7 | 0 | 0 | return type, empty result, field correctness, is_target true/false, frame not mutated, target_labels not mutated |
+| `YOLOInferenceEngine.detect()` (happy path) | 8 | 8 | 0 | 0 | return type, empty result, field correctness, bounding_box normalised, is_target true/false, frame not mutated, target_labels not mutated |
 | `YOLOInferenceEngine.detect()` (threshold filtering) | 3 | 3 | 0 | 0 | below, at, above threshold |
 | `YOLOInferenceEngine.detect()` (ordering) | 2 | 2 | 0 | 0 | descending order, equal confidence both present |
 | `YOLOInferenceEngine.detect()` (error propagation) | 2 | 2 | 0 | 0 | runtime failure → OperationError, None model → OperationError |
