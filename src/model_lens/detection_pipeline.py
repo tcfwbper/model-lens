@@ -45,7 +45,7 @@ class PipelineResult:
     """A single published output produced by one successful frame iteration.
 
     Args:
-        jpeg_bytes: JPEG-encoded RGB image, converted from the original BGR frame before inference.
+        jpeg_bytes: JPEG-encoded frame, produced by passing the raw BGR image directly to ``cv2.imencode``.
         timestamp: POSIX timestamp copied from :attr:`~model_lens.entities.Frame.timestamp`.
         source: Camera source identifier copied from :attr:`~model_lens.entities.Frame.source`.
         detections: Filtered, label-resolved detections from
@@ -195,19 +195,18 @@ class DetectionPipeline:
     def _run_one_iteration(self) -> None:
         """Execute one iteration of the frame loop.
 
-        Implements the 9-step pipeline:
+        Implements the 8-step pipeline:
 
         1. Check ``_camera_changed_event`` — recreate :class:`~model_lens.camera_capture.CameraCapture` if set.
         2. If no active camera — wait for ``_camera_changed_event``, then return.
         3. FPS throttle check — interruptible wait if within minimum inter-frame interval.
         4. Read a :class:`~model_lens.entities.Frame` from the camera.
-        5. Convert BGR → RGB (copy; do not modify ``Frame.data``).
-        6. JPEG-encode the RGB frame.
-        7. Run inference via :meth:`~model_lens.inference_engine.InferenceEngine.detect`.
-        8. Construct a :class:`PipelineResult`.
-        9. Publish to the queue (drop oldest if full).
+        5. JPEG-encode the BGR frame (``cv2.imencode`` expects BGR and handles colour-space conversion internally).
+        6. Run inference via :meth:`~model_lens.inference_engine.InferenceEngine.detect`.
+        7. Construct a :class:`PipelineResult`.
+        8. Publish to the queue (drop oldest if full).
         """
-        # ① Camera changed event
+        # Camera changed event
         if self._camera_changed_event.is_set():
             self._camera_changed_event.clear()
             if self._camera is not None:
@@ -218,12 +217,12 @@ class DetectionPipeline:
             new_camera = self._build_camera(current_config)
             self._camera = new_camera
 
-        # ② No active camera — wait for a new config
+        # No active camera — wait for a new config
         if self._camera is None:
             self._camera_changed_event.wait(timeout=1.0)
             return
 
-        # ③ FPS throttle
+        # FPS throttle
         if self._last_frame_time != 0.0:
             elapsed = time.monotonic() - self._last_frame_time
             remaining = _MIN_INTER_FRAME_INTERVAL - elapsed
@@ -232,7 +231,7 @@ class DetectionPipeline:
                 if self._stop_event.is_set():
                     return
 
-        # ④ Frame read
+        # Frame read
         try:
             frame = self._camera.read()
         except OperationError as exc:
@@ -241,17 +240,14 @@ class DetectionPipeline:
             self._camera = None
             return
 
-        # ⑤ BGR → RGB conversion
-        rgb_frame = frame.data[:, :, ::-1].copy()
-
-        # ⑥ JPEG encoding
-        success, buffer = cv2.imencode(".jpg", rgb_frame)
+        # JPEG encoding — cv2.imencode expects BGR and handles colour-space conversion internally
+        success, buffer = cv2.imencode(".jpg", frame.data)
         if not success:
             logger.warning("cv2.imencode failed; skipping frame from source %r", frame.source)
             return
         jpeg_bytes = buffer.tobytes()
 
-        # ⑦ Inference — read target_labels under lock, then release before detect()
+        # Inference — read target_labels under lock, then release before detect()
         with self._config_lock:
             target_labels = self._config.target_labels
 
@@ -264,7 +260,7 @@ class DetectionPipeline:
             logger.critical("Label map mismatch — model and label map are permanently mismatched: %s", exc)
             sys.exit(1)
 
-        # ⑧ Construct PipelineResult
+        # Construct PipelineResult
         pipeline_result = PipelineResult(
             jpeg_bytes=jpeg_bytes,
             timestamp=frame.timestamp,
@@ -272,7 +268,7 @@ class DetectionPipeline:
             detections=results,
         )
 
-        # ⑨ Publish to queue (drop oldest if full)
+        # Publish to queue (drop oldest if full)
         if self._queue.full():
             try:
                 self._queue.get_nowait()
