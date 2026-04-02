@@ -21,7 +21,7 @@
 
 - **Memory cost** — approximately 3–4 MB per frame (1080p RGB). At 30 FPS, this is 90–120 MB/s of allocation and copy overhead. This is acceptable for a local demo tool running on modern hardware; optimization to zero-copy (via memory-mapped buffers or ring queues) is deferred post-MVP.
 - **CPU cost** — `numpy.ndarray.copy()` uses `memcpy`, which is fast but not free. On CPU-constrained systems, this could become a bottleneck at very high frame rates; trade-off is acceptable for MVP.
-- **Colour space** — the copy preserves BGR; conversion to RGB (if required by the inference backend) is the responsibility of `InferenceEngine` and must be done without modifying the original `Frame.data` to maintain immutability semantics.
+- **Colour space** — the copy preserves BGR. `DetectionPipeline` passes `frame.data` (BGR) directly to both `cv2.imencode` and `engine.detect()` without conversion (see [ADR 0024](0024_bgr_rgb_conversion_in_pipeline.md)). No consumer may modify `frame.data` in place.
 
 ## Alternatives Considered
 
@@ -37,7 +37,7 @@ Both subclasses use the same OpenCV `VideoCapture` API and thus face the same bu
 
 Although `Frame` is a non-frozen dataclass (because `numpy.ndarray` is not hashable), the `data` field is **treated as read-only** by all consumers:
 
-- `InferenceEngine.detect()` must not modify `frame.data`. If RGB conversion is needed, create a separate array.
+- `InferenceEngine.detect()` must not modify `frame.data` and must not perform any colour-space conversion. `frame.data` is passed as-is (BGR) to the engine (ADR 0024).
 - The Stream API must not modify `frame.data` when encoding or annotating.
 - Any future component receiving a `Frame` must treat `data` as immutable.
 
@@ -51,4 +51,4 @@ This is a contract, not enforced by the type system (enforcement would require m
 
 ## Superseded By / Supersedes
 
-N/A
+- **Colour-space clause partially superseded by:** [ADR 0024](0024_bgr_rgb_conversion_in_pipeline.md) — colour conversion responsibility moves from `InferenceEngine` to `DetectionPipeline`. All other clauses of this ADR remain in force.

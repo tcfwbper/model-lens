@@ -1,7 +1,7 @@
 # ADR 0002: Single Bundled InferenceEngine
 
 **Date:** 2026-03-23
-**Status:** Accepted
+**Status:** Superseded
 
 ## Context
 The system needs to run object detection on each camera frame. There are multiple ways to structure the inference layer: a single hardcoded implementation, a registry of swappable backends, or a cloud-delegated API.
@@ -23,4 +23,5 @@ MVP scope is a local demo tool; runtime model swapping adds complexity without d
 - The abstract `InferenceEngine` base class defines an `ENGINE_REGISTRY` dict mapping backend name strings to concrete subclass types. Adding a new backend (e.g., ONNX, TFLite) requires: (1) implementing a new subclass, (2) importing it at startup, (3) adding one entry to `ENGINE_REGISTRY`. No changes to the Detection Pipeline or other components are required.
 
 ## Superseded By / Supersedes
-N/A
+
+- **Superseded By:** [ADR 0023](0023_model_registry_and_yolo_backend.md) — model is retrieved from a model registry; `YOLOInferenceEngine` is the named concrete backend.

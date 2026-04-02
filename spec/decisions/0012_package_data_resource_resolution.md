@@ -1,7 +1,7 @@
 # ADR 0012: Package Data Resource Resolution and Fallback Strategy
 
 **Date:** 2026-03-24
-**Status:** Accepted
+**Status:** Superseded
 
 ## Context
 
@@ -76,4 +76,4 @@ If a future release adds a persistent config file (JSON/TOML), it can populate `
 
 ## Superseded By / Supersedes
 
-N/A
+- **Superseded By:** [ADR 0023](0023_model_registry_and_yolo_backend.md) — model and label map are retrieved from a model registry; file-path resolution and `importlib.resources` fallback no longer apply.

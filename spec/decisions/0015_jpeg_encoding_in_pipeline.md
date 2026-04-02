@@ -10,24 +10,24 @@ The question is where in the pipeline JPEG encoding should be performed: inside 
 Pipeline before queuing, or in the Stream API when serving the SSE response.
 
 A related question is what colour space the JPEG should encode: BGR (OpenCV's native format)
-or RGB (the format required for inference).
+or RGB.
 
 ## Decision
 
-JPEG encoding is performed **inside the Detection Pipeline**, immediately after BGR→RGB
-conversion and before the result is placed on the queue.
+JPEG encoding is performed **inside the Detection Pipeline**, directly from the BGR
+`frame.data`, and before the result is placed on the queue. No intermediate BGR→RGB
+conversion is performed.
 
 The sequence within the frame loop is:
 
-1. Read frame (BGR from OpenCV).
-2. Convert BGR → RGB: `rgb_frame = frame.data[:, :, ::-1].copy()`.
-3. Encode JPEG: `success, buffer = cv2.imencode(".jpg", rgb_frame)`.
-4. Run inference on the **original** `frame.data` (BGR) if the model expects BGR, or pass
-   `rgb_frame` if the model expects RGB — this is the engine's concern; the pipeline passes
-   `frame.data` to `engine.detect()`.
-5. Publish `PipelineResult(jpeg_bytes=buffer.tobytes(), ...)`.
+1. Read frame (`Frame.data` is BGR from OpenCV).
+2. Encode JPEG: `success, buffer = cv2.imencode(".jpg", frame.data)`.
+3. Run inference: `engine.detect(frame.data, target_labels)` — engine receives BGR `frame.data`.
+4. Publish `PipelineResult(jpeg_bytes=buffer.tobytes(), ...)`.
 
-`PipelineResult.jpeg_bytes` always contains a complete, valid JPEG buffer in RGB colour space.
+`PipelineResult.jpeg_bytes` always contains a complete, valid JPEG buffer encoded from BGR
+`frame.data`. The Stream API wraps `jpeg_bytes` in an SSE `multipart/x-mixed-replace` boundary
+and sends it verbatim.
 The Stream API wraps `jpeg_bytes` in an SSE `multipart/x-mixed-replace` boundary and sends
 it verbatim; no encoding or colour-space conversion is needed at the Stream layer.
 
@@ -48,16 +48,6 @@ it verbatim; no encoding or colour-space conversion is needed at the Stream laye
   vs. 3–4 MB uncompressed). Encoding before queuing bounds queue memory at ~1 MB rather than
   ~20 MB.
 
-### Why encode RGB (not BGR)?
-
-- **Browser compatibility** — browsers interpret JPEG data as RGB. Encoding a BGR frame as
-  JPEG produces a JPEG whose R and B channels are swapped; the browser renders it with incorrect
-  colours (blue objects appear orange, etc.).
-- **Consistent with human expectation** — the RGB → JPEG path produces visually correct images
-  without requiring downstream colour correction.
-- **BGR is an OpenCV convention, not a universal one** — it is safer to convert to the standard
-  RGB colour order before producing any artefact that will be consumed outside OpenCV.
-
 ### Why use `cv2.imencode(".jpg", ...)` specifically?
 
 - **Already a dependency** — OpenCV is already required for `CameraCapture`; no additional
@@ -75,7 +65,7 @@ failure; no retry is attempted because the next frame will be a fresh attempt an
 
 ## Constraints
 
-- JPEG quality is not configurable for MVP. `cv2.imencode(".jpg", rgb_frame)` uses the default
+- JPEG quality is not configurable for MVP. `cv2.imencode(".jpg", frame.data)` uses the default
   quality (~95). A future release could expose quality as a config parameter if bandwidth
   becomes a concern.
 - The pipeline does **not** draw bounding boxes or annotations on the JPEG. Bounding box
@@ -103,4 +93,4 @@ failure; no retry is attempted because the next frame will be a fresh attempt an
 
 ## Superseded By / Supersedes
 
-N/A
+- **Step 2 updated by:** [ADR 0024](0024_bgr_rgb_conversion_in_pipeline.md) — JPEG is encoded directly from BGR `frame.data` using `cv2.imencode(".jpg", frame.data)`; no intermediate BGR→RGB conversion is performed.
