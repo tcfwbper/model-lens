@@ -54,6 +54,12 @@ jobs:
           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
           bash dev/ui-test.sh
 
+      - name: Build frontend assets
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          bash dev/ui-build.sh
+
       - name: Start server and verify
         run: |
           . .venv/bin/activate
