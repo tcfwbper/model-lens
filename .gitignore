@@ -30,9 +30,10 @@ coverage.xml
 .pytest_cache/
 *.tgz
 
-# Aider
+# AI agents
 .aider*
 !.aider.instructions.md
+.claude
 
 # Models
 *.pt
@@ -43,5 +44,9 @@ coverage.xml
 *.trt
 
 # Static Assets
-**/*/dist/
-**/*/build/
+dist/
+build/
+
+# UI
+node_modules
+.vite
