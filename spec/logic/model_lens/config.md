@@ -15,9 +15,9 @@ object. Configuration is resolved from three sources in priority order (lowest t
 2. TOML config file (optional).
 3. Environment variables (`ML_*`).
 
-After `AppConfig` is constructed and validated, all paths are guaranteed to be resolvable and all
-values are guaranteed to satisfy their constraints. Downstream components (`InferenceEngine`,
-`DetectionPipeline`, etc.) may rely on this guarantee without re-validating.
+After `AppConfig` is constructed and validated, all values are guaranteed to satisfy their
+constraints. Downstream components (`InferenceEngine`, `DetectionPipeline`, etc.) may rely on
+this guarantee without re-validating.
 
 ---
 
@@ -34,13 +34,12 @@ The single public entry point for configuration loading.
 3. Load and parse the TOML file if one is found (see [TOML Parsing](#toml-parsing)).
 4. Merge built-in defaults with TOML values (see [Merge Strategy](#merge-strategy)).
 5. Apply environment variable overrides key-by-key (see [Environment Variable Overrides](#environment-variable-overrides)).
-6. Resolve empty `model_path` and `labels_path` to their bundled package-data paths (see [Package-Data Path Resolution](#package-data-path-resolution)).
-7. Construct and return `AppConfig`, which triggers `validate()` in `__post_init__`.
+6. Construct `AppConfig`, call `validate()`, and return.
 
 **Returns:** A fully validated, immutable `AppConfig` instance.
 
 **Raises:**
-- `ConfigurationError`: If any value fails validation (raised from `AppConfig.__post_init__` via `validate()`).
+- `ConfigurationError`: If any value fails validation.
 - `ConfigurationError`: If the TOML file exists but cannot be parsed.
 
 ---
@@ -77,13 +76,8 @@ Frozen dataclass holding model-related settings.
 
 | Field | Type | Default | Validation |
 |---|---|---|---|
-| `model_path` | `str` | `""` | Non-empty after package-data resolution; resolved path must exist |
-| `labels_path` | `str` | `""` | Non-empty after package-data resolution; resolved path must exist |
+| `model` | `str` | `"yolov8n"` | Non-empty string |
 | `confidence_threshold` | `float` | `0.5` | `0.0 < value <= 1.0` |
-
-> **Note:** By the time `AppConfig` is constructed, `model_path` and `labels_path` are always
-> non-empty absolute path strings. The empty-string default is only an intermediate state inside
-> `ConfigLoader` before package-data resolution runs.
 
 ---
 
@@ -99,9 +93,6 @@ Top-level frozen dataclass. Mirrors the TOML section structure.
 
 `AppConfig` is decorated with `@dataclass(frozen=True)`.
 
-`__post_init__` calls `validate(self)` immediately after construction. If validation fails,
-`ConfigurationError` is raised before the object is returned to the caller.
-
 ---
 
 ## Internal Functions
@@ -113,6 +104,7 @@ violation found, with a message that identifies the key, the invalid value, and 
 
 ```
 ConfigurationError: model.confidence_threshold must satisfy 0.0 < value <= 1.0, got 1.5
+ConfigurationError: model.model must be non-empty
 ConfigurationError: server.port must be between 1 and 65535, got 0
 ConfigurationError: camera.rtsp_url must be non-empty when source_type is "rtsp"
 ```
@@ -179,7 +171,7 @@ Type coercion is applied before the override is stored:
 
 If coercion fails (e.g., `ML_SERVER_PORT=abc`), raise:
 ```
-ConfigurationError: Environment variable ML_SERVER_PORT cannot be coerced to int, got "abc"
+ConfigurationError: Cannot coerce ML_SERVER_PORT="abc" to int
 ```
 
 Full mapping of environment variables to config keys:
@@ -192,29 +184,8 @@ Full mapping of environment variables to config keys:
 | `ML_CAMERA_SOURCE_TYPE` | `camera.source_type` |
 | `ML_CAMERA_DEVICE_INDEX` | `camera.device_index` |
 | `ML_CAMERA_RTSP_URL` | `camera.rtsp_url` |
-| `ML_MODEL_MODEL_PATH` | `model.model_path` |
-| `ML_MODEL_LABELS_PATH` | `model.labels_path` |
+| `ML_MODEL_MODEL` | `model.model` |
 | `ML_MODEL_CONFIDENCE_THRESHOLD` | `model.confidence_threshold` |
-
----
-
-## Package-Data Path Resolution
-
-After env var overrides are applied and before `AppConfig` is constructed:
-
-- If `model.model_path` is an empty string, resolve it to the bundled package-data model file
-  using `importlib.resources`.
-- If `model.labels_path` is an empty string, resolve it to the bundled package-data label map
-  file using `importlib.resources`.
-
-The resolved paths are absolute path strings. After this step, both fields are guaranteed to be
-non-empty. The existence of the resolved paths is verified by `validate()`.
-
-If `importlib.resources` cannot locate the bundled file, raise:
-```
-ConfigurationError: Bundled model file could not be resolved from package data
-ConfigurationError: Bundled labels file could not be resolved from package data
-```
 
 ---
 
@@ -231,7 +202,6 @@ logger = logging.getLogger(__name__)
 | No config file found | `WARNING` | `"No config file found; using built-in defaults."` |
 | Config file found and loaded | `INFO` | `"Loading config from {resolved_path}"` |
 | Env var override applied | `DEBUG` | `"Env override: {env_var}={value!r} → {section}.{key}"` |
-| Package-data path resolved | `DEBUG` | `"Resolved bundled {field} to {resolved_path}"` |
 
 ---
 

@@ -23,7 +23,8 @@ from model_lens.entities import (
 
 ## Fixtures
 
-Uses the shared `client` and `mock_pipeline` fixtures from `conftest.py`.
+Uses the shared `client` and `mock_pipeline` fixtures from `conftest.py`. Tests for
+`GET /config/labels` also require a `mock_engine` on `app.state.engine` (see section 2).
 
 ---
 
@@ -51,9 +52,37 @@ Uses the shared `client` and `mock_pipeline` fixtures from `conftest.py`.
 
 ---
 
-## 2. Config API — `PUT /config/camera`
+## 2. Config API — `GET /config/labels`
 
-### 2.1 Happy Path — Switch to Local Camera
+### Fixture: `client_with_engine`
+
+A dedicated client fixture that injects both `mock_pipeline` and a `mock_engine` into
+`app.state`, so that the `GET /config/labels` handler can call `engine.get_label_map()`.
+
+```python
+@pytest.fixture
+def client_with_engine(client, mock_pipeline):
+    mock_engine = MagicMock()
+    mock_engine.get_label_map.return_value = {0: "person", 1: "bicycle", 2: "car"}
+    client.app.state.engine = mock_engine
+    return client, mock_engine
+```
+
+### 2.1 Happy Path — GET /config/labels
+
+| Test ID | Category | Description | Input | Expected |
+|---|---|---|---| ---|
+| `test_get_labels_returns_200` | `unit` | `GET /config/labels` returns HTTP 200 | `mock_engine.get_label_map()` returns a non-empty label map | `response.status_code == 200` |
+| `test_get_labels_response_shape` | `unit` | Response body has a `valid_labels` key containing a list | same as above | `"valid_labels" in body` and `isinstance(body["valid_labels"], list)` |
+| `test_get_labels_values_match_engine_label_map` | `unit` | `valid_labels` list contains all values from `engine.get_label_map()` | `get_label_map()` returns `{0: "person", 1: "bicycle", 2: "car"}` | `body["valid_labels"] == ["person", "bicycle", "car"]` |
+| `test_get_labels_calls_get_label_map` | `unit` | `engine.get_label_map()` is called exactly once | `GET /config/labels` | `mock_engine.get_label_map.call_count == 1` |
+| `test_get_labels_empty_label_map` | `unit` | Empty label map returns empty `valid_labels` list | `get_label_map()` returns `{}` | `body["valid_labels"] == []` |
+
+---
+
+## 3. Config API — `PUT /config/camera`
+
+### 3.1 Happy Path — Switch to Local Camera
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -64,7 +93,7 @@ Uses the shared `client` and `mock_pipeline` fixtures from `conftest.py`.
 | `test_put_camera_local_preserves_target_labels` | `unit` | `target_labels` in the updated `RuntimeConfig` is preserved from the current config | current config has `target_labels=["cat"]`; request updates camera only | the `RuntimeConfig` passed to `update_config` has `target_labels == ["cat"]` |
 | `test_put_camera_local_preserves_confidence_threshold` | `unit` | `confidence_threshold` in the updated `RuntimeConfig` is preserved | current config has `confidence_threshold=0.75` | the `RuntimeConfig` passed to `update_config` has `confidence_threshold == 0.75` |
 
-### 2.2 Happy Path — Switch to RTSP Camera
+### 3.2 Happy Path — Switch to RTSP Camera
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -72,7 +101,7 @@ Uses the shared `client` and `mock_pipeline` fixtures from `conftest.py`.
 | `test_put_camera_rtsp_update_config_receives_runtime_config` | `unit` | `update_config` receives a `RuntimeConfig` with the new `RtspCameraConfig` | same as above | the `RuntimeConfig` passed to `update_config` has `camera.rtsp_url == "rtsp://192.168.1.10/stream"` |
 | `test_put_camera_rtsp_response_reflects_new_camera` | `unit` | Response body reflects the updated RTSP camera | same as above | `body["camera"]["source_type"] == "rtsp"` and `body["camera"]["rtsp_url"] == "rtsp://192.168.1.10/stream"` |
 
-### 2.3 Validation Failures
+### 3.3 Validation Failures
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -87,9 +116,9 @@ Uses the shared `client` and `mock_pipeline` fixtures from `conftest.py`.
 
 ---
 
-## 3. Config API — `PUT /config/labels`
+## 4. Config API — `PUT /config/labels`
 
-### 3.1 Happy Path — PUT /config/labels
+### 4.1 Happy Path — PUT /config/labels
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -101,7 +130,7 @@ Uses the shared `client` and `mock_pipeline` fixtures from `conftest.py`.
 | `test_put_labels_preserves_camera` | `unit` | `camera` in the updated `RuntimeConfig` is preserved from the current config | current config has `LocalCameraConfig(device_index=1)`; request updates labels only | the `RuntimeConfig` passed to `update_config` has `camera.device_index == 1` |
 | `test_put_labels_preserves_confidence_threshold` | `unit` | `confidence_threshold` in the updated `RuntimeConfig` is preserved | current config has `confidence_threshold=0.75` | the `RuntimeConfig` passed to `update_config` has `confidence_threshold == 0.75` |
 
-### 3.2 Validation Failures
+### 4.2 Validation Failures
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -117,5 +146,6 @@ Uses the shared `client` and `mock_pipeline` fixtures from `conftest.py`.
 | Entity | Test Count (approx.) | unit | e2e | race | Key Concerns |
 |---|---|---|---|---|---|
 | `GET /config` | 10 | 10 | 0 | 0 | local/RTSP shape, field presence/absence, labels, confidence |
+| `GET /config/labels` | 5 | 5 | 0 | 0 | `valid_labels` shape, values from engine label map, empty map |
 | `PUT /config/camera` | 17 | 17 | 0 | 0 | local/RTSP update, `update_config` called, field preservation, validation failures, ignored fields |
 | `PUT /config/labels` | 11 | 11 | 0 | 0 | labels update, `update_config` called, field preservation, validation failures |

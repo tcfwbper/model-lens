@@ -172,15 +172,14 @@ def lifespan_mocks(tmp_path):
     (dist_dir / "static").mkdir()
 
     mock_config = MagicMock()
-    mock_config.model.model_path = "fake.pt"
+    mock_config.model.model = "fake.pt"
     mock_config.model.confidence_threshold = 0.5
-    mock_config.model.labels_path = "fake_labels.txt"
     mock_config.camera.source_type = "local"
     mock_config.camera.device_index = 0
 
     with (
         patch("model_lens.app.load", return_value=mock_config) as mock_load,
-        patch("model_lens.app.TorchInferenceEngine") as mock_engine_cls,
+        patch("model_lens.app.YOLOInferenceEngine") as mock_engine_cls,
         patch("model_lens.app.DetectionPipeline") as mock_pipeline_cls,
         patch("model_lens.app.resolve_dist_dir", return_value=dist_dir),
     ):
@@ -203,10 +202,10 @@ def lifespan_mocks(tmp_path):
 
 | Test ID | Category | Description | Expected |
 |---|---|---|---|
-| `test_lifespan_inference_engine_constructed` | `unit` | `TorchInferenceEngine` is constructed with values from `AppConfig` | `lifespan_mocks["engine_cls"]` called with `model_path`, `confidence_threshold`, `labels_path` from `mock_config.model` |
+| `test_lifespan_inference_engine_constructed` | `unit` | `YOLOInferenceEngine` is constructed with values from `AppConfig` | `lifespan_mocks["engine_cls"]` called with `model` and `confidence_threshold` from `mock_config.model` |
 | `test_lifespan_detection_pipeline_constructed` | `unit` | `DetectionPipeline` is constructed with the engine and initial `RuntimeConfig` | `lifespan_mocks["pipeline_cls"]` called once |
 | `test_lifespan_initial_runtime_config_camera_from_app_config` | `unit` | The `RuntimeConfig` passed to `DetectionPipeline` has a `camera` whose attributes match `AppConfig.camera` (e.g. `device_index` equals `mock_config.camera.device_index`) | inspect the first positional or keyword argument passed to `lifespan_mocks["pipeline_cls"]`; the `RuntimeConfig`'s `camera.device_index == mock_config.camera.device_index` |
-| `test_lifespan_initial_runtime_config_target_labels_empty` | `unit` | The initial `RuntimeConfig` has an empty `target_labels` list (no labels are pre-loaded from `AppConfig`) | inspect the `RuntimeConfig` passed to `lifespan_mocks["pipeline_cls"]`; `runtime_config.target_labels == []` |
+| `test_lifespan_initial_runtime_config_target_labels_from_engine` | `unit` | The initial `RuntimeConfig` has `target_labels` populated from `engine.get_label_map()` | inspect the `RuntimeConfig` passed to `lifespan_mocks["pipeline_cls"]`; `runtime_config.target_labels == list(lifespan_mocks["engine"].get_label_map.return_value.values())` |
 | `test_lifespan_pipeline_start_called` | `unit` | `DetectionPipeline.start()` is called during startup | `lifespan_mocks["pipeline"].start.call_count == 1` |
 | `test_lifespan_pipeline_stored_in_app_state` | `unit` | After startup, `app.state.pipeline` is the constructed `DetectionPipeline` | `app.state.pipeline is lifespan_mocks["pipeline"]` |
 
@@ -215,7 +214,7 @@ def lifespan_mocks(tmp_path):
 | Test ID | Category | Description | Expected |
 |---|---|---|---|
 | `test_lifespan_pipeline_stop_called_on_shutdown` | `unit` | `DetectionPipeline.stop()` is called during shutdown | `lifespan_mocks["pipeline"].stop.call_count == 1` |
-| `test_lifespan_engine_teardown_called_on_shutdown` | `unit` | `TorchInferenceEngine.teardown()` is called during shutdown | `lifespan_mocks["engine"].teardown.call_count == 1` |
+| `test_lifespan_engine_teardown_called_on_shutdown` | `unit` | `YOLOInferenceEngine.teardown()` is called during shutdown | `lifespan_mocks["engine"].teardown.call_count == 1` |
 | `test_lifespan_engine_teardown_after_pipeline_stop` | `unit` | `teardown()` is called after `stop()` (order enforced) | `lifespan_mocks["pipeline"].stop` was called before `lifespan_mocks["engine"].teardown` (use `Mock` call order or side-effect tracking) |
 
 ### 3.3 Error Propagation
@@ -223,8 +222,8 @@ def lifespan_mocks(tmp_path):
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
 | `test_lifespan_load_error_exits` | `unit` | `load()` raising `ConfigurationError` causes `sys.exit(1)` | `mock_load.side_effect = ConfigurationError("bad config")` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
-| `test_lifespan_inference_engine_configuration_error_exits` | `unit` | `TorchInferenceEngine()` raising `ConfigurationError` causes `sys.exit(1)` | `mock_engine_cls.side_effect = ConfigurationError("bad model")` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
-| `test_lifespan_inference_engine_operation_error_exits` | `unit` | `TorchInferenceEngine()` raising `OperationError` causes `sys.exit(1)` | `mock_engine_cls.side_effect = OperationError("load failed")` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
+| `test_lifespan_inference_engine_configuration_error_exits` | `unit` | `YOLOInferenceEngine()` raising `ConfigurationError` causes `sys.exit(1)` | `mock_engine_cls.side_effect = ConfigurationError("bad model")` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
+| `test_lifespan_inference_engine_operation_error_exits` | `unit` | `YOLOInferenceEngine()` raising `OperationError` causes `sys.exit(1)` | `mock_engine_cls.side_effect = OperationError("load failed")` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
 | `test_lifespan_missing_dist_dir_exits` | `unit` | Missing `dist/` directory causes `sys.exit(1)` | `resolve_dist_dir` raises `FileNotFoundError` | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
 | `test_lifespan_missing_index_html_exits` | `unit` | Missing `dist/index.html` causes `sys.exit(1)` | `dist/` exists but `index.html` is absent | `pytest.raises(SystemExit)` with `exc_info.value.code == 1` |
 | `test_lifespan_pipeline_stop_called_even_after_startup_failure` | `unit` | `DetectionPipeline.stop()` is still called if startup fails after the pipeline is constructed | pipeline is constructed but `start()` raises `RuntimeError` | `lifespan_mocks["pipeline"].stop.call_count == 1` |
@@ -265,7 +264,7 @@ def client_with_broken_pipeline(mock_pipeline, tmp_path):
 > **Note:** `raise_server_exceptions=False` is required so that `TestClient` returns the
 > HTTP 500 response instead of re-raising the exception in the test process.
 
-### 4.1 Unhandled Exceptions
+### 4.1 Error Propagation
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|

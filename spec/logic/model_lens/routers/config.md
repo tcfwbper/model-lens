@@ -16,7 +16,8 @@ that changes take effect immediately without restarting the server.
 
 ## Base Path: `/config`
 
-This router is mounted with prefix `/config` on the root FastAPI app.
+This router is included on the root FastAPI app without a prefix. All route paths are
+defined with the `/config` prefix inline (e.g. `@router.get("/config")`).
 
 ---
 
@@ -109,6 +110,25 @@ API returns `200 OK` regardless.
 
 ---
 
+### `GET /config/labels`
+
+Returns the full set of labels known to the inference engine (i.e. the model's label map).
+This is distinct from the active filter in `RuntimeConfig.target_labels`.
+
+**Response `200 OK`:**
+
+```json
+{
+  "valid_labels": ["person", "bicycle", "car", "cat", "dog"]
+}
+```
+
+- The list is sourced directly from `YOLOInferenceEngine.get_label_map()` (the engine stored
+  in `app.state.engine`), not from `RuntimeConfig`.
+- The order of labels matches the model's internal label map order.
+
+---
+
 ### `PUT /config/labels`
 
 Replaces the target labels list. Triggers `DetectionPipeline.update_config()` with a new
@@ -141,8 +161,14 @@ Replaces the target labels list. Triggers `DetectionPipeline.update_config()` wi
 
 ## Dependency
 
-This router accesses the `DetectionPipeline` via `Depends(get_pipeline)` (see `app.py`
-dependency injection).
+This router accesses `app.state` directly via the `Request` object:
+
+- `request.app.state.pipeline` — the `DetectionPipeline` instance, used by all mutation
+  endpoints (`PUT /config/camera`, `PUT /config/labels`) and `GET /config`.
+- `request.app.state.engine` — the `YOLOInferenceEngine` instance, used by `GET /config/labels`
+  to read the model's label map.
+
+No `Depends()` injection is used; both values are cast with `cast()` at the call site.
 
 ---
 

@@ -231,21 +231,14 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_run_one_iteration_calls_detect_with_frame_data` | `unit` | `engine.detect()` is called with `frame.data` (BGR array) | call `_run_one_iteration()` | first positional arg to `engine.detect` is the original `frame.data` array |
 | `test_run_one_iteration_calls_detect_with_target_labels` | `unit` | `engine.detect()` is called with `target_labels` from current `RuntimeConfig` | `RuntimeConfig(target_labels=["cat"])` | second positional arg to `engine.detect` is `["cat"]` |
 
-### 8.2 Happy Path — BGR→RGB Conversion
-
-| Test ID | Category | Description | Input | Expected |
-|---|---|---|---|---|
-| `test_run_one_iteration_converts_bgr_to_rgb` | `unit` | `cv2.imencode` receives an RGB array (channels reversed), not the original BGR | patch `cv2.imencode` to capture its argument | the array passed to `cv2.imencode` has channels reversed relative to `frame.data`; specifically `np.array_equal(arg[:, :, 0], frame.data[:, :, 2])` |
-| `test_run_one_iteration_does_not_modify_frame_data` | `unit` | The original `frame.data` array is not modified by the BGR→RGB conversion | construct `frame.data` with known channel values; call `_run_one_iteration()` | `frame.data[:, :, 0]` is unchanged after the iteration |
-
-### 8.3 Error Propagation — JPEG Encoding
+### 8.2 Error Propagation — JPEG Encoding
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
 | `test_run_one_iteration_skips_frame_on_encode_failure` | `unit` | If `cv2.imencode` returns `(False, ...)`, no result is published | patch `cv2.imencode` to return `(False, None)` | `pipeline.get_queue().qsize() == 0` |
 | `test_run_one_iteration_logs_warning_on_encode_failure` | `unit` | A `WARNING` is logged when `cv2.imencode` returns `False` | same as above | `logging.warning` (or equivalent) called at least once |
 
-### 8.4 Error Propagation — Inference Engine
+### 8.3 Error Propagation — Inference Engine
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -254,7 +247,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_run_one_iteration_exits_on_parse_error` | `unit` | `ParseError` from `engine.detect()` causes `sys.exit(1)` | `engine.detect.side_effect = ParseError("mismatch")` | raises `SystemExit` with code `1` |
 | `test_run_one_iteration_logs_critical_on_parse_error` | `unit` | `ParseError` from `engine.detect()` is logged at `CRITICAL` level | same as above | `logging.critical` (or equivalent) called at least once |
 
-### 8.5 Error Propagation — Camera Capture
+### 8.4 Error Propagation — Camera Capture
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -264,7 +257,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_run_one_iteration_skips_publish_on_camera_operation_error` | `unit` | No result is published when `camera.read()` raises `OperationError` | same as above | `pipeline.get_queue().qsize() == 0` |
 | `test_run_one_iteration_camera_cleared_no_retry` | `unit` | After `OperationError` from `camera.read()`, a subsequent call to `_run_one_iteration()` does not attempt `camera.read()` again | call `_run_one_iteration()` once (raises `OperationError`); call it again | `mock_camera.read.call_count == 1` total across both calls |
 
-### 8.6 None / Empty Input
+### 8.5 None / Empty Input
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -272,7 +265,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_run_one_iteration_does_not_publish_when_no_camera` | `unit` | No result is published when internal camera is `None` | same as above | `pipeline.get_queue().qsize() == 0` |
 | `test_run_one_iteration_waits_on_camera_changed_event_when_no_camera` | `unit` | When internal camera is `None`, the loop calls `_camera_changed_event.wait(timeout=1.0)` | set internal camera to `None`; patch `_camera_changed_event.wait` | `_camera_changed_event.wait` called with `timeout=1.0` |
 
-### 8.7 State Transitions
+### 8.6 State Transitions
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -283,7 +276,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_run_one_iteration_sets_camera_to_none_on_device_not_found` | `unit` | If new `CameraCapture` raises `DeviceNotFoundError`, internal camera is set to `None` | set `_camera_changed_event`; patch `LocalCamera` to raise `DeviceNotFoundError` | internal camera attribute is `None` |
 | `test_run_one_iteration_logs_error_on_device_not_found_in_loop` | `unit` | `DeviceNotFoundError` during camera recreation is logged at `ERROR` level | same as above | `logging.error` (or equivalent) called at least once |
 
-### 8.8 Boundary Values — queue capacity
+### 8.7 Boundary Values — queue capacity
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
@@ -291,7 +284,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_run_one_iteration_logs_debug_on_drop` | `unit` | A `DEBUG` message is logged when a frame is dropped due to a full queue | same as above | `logging.debug` (or equivalent) called at least once |
 | `test_run_one_iteration_publishes_when_queue_drained_between_full_check_and_get` | `race` | TOCTOU race: `full()` returns `True` but consumers drain the queue before `get_nowait()` executes, causing `queue.Empty` — the result must still be published | patch `queue.full` to return `True` on the first call while the underlying queue is actually empty; call `_run_one_iteration()` | no exception raised; `pipeline.get_queue().qsize() == 1` and the item is a `PipelineResult` |
 
-### 8.9 Boundary Values — FPS throttle
+### 8.8 Boundary Values — FPS throttle
 
 > **Note:** In all throttle tests, `time.monotonic` is patched to control elapsed time.
 > `_stop_event.wait` is patched (or spied upon) to capture the `timeout` argument without
@@ -300,12 +293,12 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_run_one_iteration_throttle_waits_when_too_fast` | `unit` | When interval is less than 1/30s, compute remaining time and trigger interruptible wait to cap output at 30 FPS | `elapsed = 10ms` | `_stop_event.wait` called with `timeout == pytest.approx(1/30 - 0.010, abs=5e-3)` |
+| `test_run_one_iteration_throttle_waits_when_too_fast` | `unit` | When interval is less than 1/30s, compute remaining time and trigger interruptiHappyle wait to cap output at 30 FPS | `elapsed = 10ms` | `_stop_event.wait` called with `timeout == pytest.approx(1/30 - 0.010, abs=5e-3)` |
 | `test_run_one_iteration_no_wait_when_already_slow` | `unit` | When capture or processing already exceeds 1/30s, do not wait further (boundary condition) | `elapsed = 40ms` | `_stop_event.wait` not called (or called with timeout 0) |
 | `test_run_one_iteration_no_throttle_on_first_frame` | `unit` | First iteration (no previous time record) does not trigger throttle wait | `_last_frame_time = 0` | `_stop_event.wait` not called |
 | `test_run_one_iteration_updates_last_frame_time_after_publish` | `unit` | After successful publish, update `_last_frame_time` as the baseline for the next throttle check | patch `time.monotonic` | `pipeline._last_frame_time` updated to current monotonic time |
 
-### 8.10 Concurrent Behaviour
+### 8.9 Concurrent Behaviour
 
 > **Note:** These tests verify that the `RuntimeConfig` lock is used correctly in the frame loop. `_run_one_iteration()` is called directly. The lock is inspected via `unittest.mock` to confirm acquire/release ordering relative to `engine.detect()`.
 
@@ -314,7 +307,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `test_run_one_iteration_releases_lock_before_detect` | `race` | The `RuntimeConfig` lock is released before `engine.detect()` is called | patch the lock's `release` method and `engine.detect` to record call order | `lock.release` is called before `engine.detect` in the call sequence |
 | `test_run_one_iteration_detect_called_without_lock` | `race` | `engine.detect()` is not called while the lock is held | patch `engine.detect` to assert `lock.locked() is False` at call time | no `AssertionError` raised inside `engine.detect` |
 
-### 8.11 Happy Path — queue method calls
+### 8.10 Happy Path — queue method calls
 
 > **Note:** `queue.Queue.get_nowait` and `queue.Queue.put_nowait` are patched to verify the pipeline uses non-blocking calls exclusively when publishing results.
 
@@ -402,7 +395,7 @@ def pipeline(mock_engine, default_config, mock_camera, mocker):
 | `DetectionPipeline.update_config` | 3 | 3 | 0 | 0 | config replaced, event set, returns immediately |
 | `DetectionPipeline.get_config` | 4 | 2 | 0 | 2 | returns current config, acquires lock, concurrent safety with `update_config` |
 | `DetectionPipeline.get_queue` | 2 | 2 | 0 | 0 | returns `queue.Queue`, same object each call |
-| `DetectionPipeline._run_one_iteration` | 41 | 38 | 0 | 3 | BGR→RGB conversion, JPEG encoding failure, inference errors, camera read errors, FPS throttle boundary, queue drop-oldest, TOCTOU race on full-then-empty queue, lock/detect ordering, non-blocking queue methods |
+| `DetectionPipeline._run_one_iteration` | 39 | 36 | 0 | 3 | JPEG encoding failure, inference errors, camera read errors, FPS throttle boundary, queue drop-oldest, TOCTOU race on full-then-empty queue, lock/detect ordering, non-blocking queue methods |
 | End-to-End — FPS cap | 1 | 0 | 1 | 0 | actual output rate ≤ 30 FPS over 1-second window |
 | Concurrency — `update_config` | 3 | 0 | 0 | 3 | no exception under concurrent writes, final config is one of the submitted values, event set |
 | Concurrency — `stop()` | 2 | 0 | 0 | 2 | clean join from separate thread, throttle wait interrupted by stop signal |

@@ -30,12 +30,11 @@ lifespan() enters
     └── ConfigurationError → log CRITICAL, sys.exit(1)
     │
     ▼
-2. Construct TorchInferenceEngine(
-       model_path=app_config.model.model_path,
+2. Construct YOLOInferenceEngine(
+       model=app_config.model.model,
        confidence_threshold=app_config.model.confidence_threshold,
-       labels_path=app_config.model.labels_path,
    )
-    └── ConfigurationError / OperationError / ParseError → log CRITICAL, sys.exit(1)
+    └── ConfigurationError / OperationError → log CRITICAL, sys.exit(1)
     │
     ▼
 3. Construct initial RuntimeConfig from AppConfig
@@ -63,7 +62,7 @@ lifespan() resumes after yield
 1. DetectionPipeline.stop()   ← blocks until background thread exits
     │
     ▼
-2. TorchInferenceEngine.teardown()
+2. YOLOInferenceEngine.teardown()
     │
     ▼
 lifespan() exits
