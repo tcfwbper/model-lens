@@ -40,14 +40,6 @@ class InferenceEngine(abc.ABC):
 
     Loads and owns the label map at construction time. Subclasses implement
     :meth:`detect` to run backend-specific inference.
-
-    Args:
-        labels_path: Absolute path to the label map file. Must point to an
-            existing, readable plain-text file.
-
-    Raises:
-        ConfigurationError: If ``labels_path`` does not exist or cannot be read.
-        ParseError: If the label map file is empty or contains only blank lines.
     """
 
     @abc.abstractmethod

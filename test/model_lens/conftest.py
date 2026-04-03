@@ -20,7 +20,6 @@ from fixtures.camera_capture import (  # noqa: F401
     valid_bgr_frame,
 )
 from fixtures.config import (  # noqa: F401
-    bundled_paths,
     minimal_toml_content,
     valid_app_config,
 )
