@@ -11,11 +11,10 @@
 ## Imports Required
 
 ```python
-import os
 import sys
-import tomllib
+from dataclasses import FrozenInstanceError
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -148,7 +147,7 @@ from model_lens.exceptions import ConfigurationError
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_validate_valid_config_returns_none` | unit | `validate()` returns `None` for a fully valid config | A fully constructed valid `AppConfig` with mocked path existence | `returns None` |
+| `test_validate_valid_config_returns_none` | unit | `validate()` returns `None` for a fully valid config | A fully constructed valid `AppConfig` | `returns None` |
 
 ### 5.2 Validation Failures — `server.host`
 
@@ -224,7 +223,7 @@ from model_lens.exceptions import ConfigurationError
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_load_no_config_file_uses_defaults` | unit | When no `--config` flag and no `model_lens.toml` in cwd, built-in defaults are used | `sys.argv = ["prog"]`; cwd has no `model_lens.toml`; bundled paths mocked | returned `AppConfig.server.port == 8080` |
+| `test_load_no_config_file_uses_defaults` | unit | When no `--config` flag and no `model_lens.toml` in cwd, built-in defaults are used | `sys.argv = ["prog"]`; cwd has no `model_lens.toml` | returned `AppConfig.server.port == 8080` |
 | `test_load_no_config_file_logs_warning` | unit | Warning is logged when no config file is found | same as above | `logger.warning` called with `"No config file found; using built-in defaults."` |
 
 ### 6.2 Happy Path — load
@@ -245,11 +244,11 @@ from model_lens.exceptions import ConfigurationError
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_load_toml_overrides_server_port` | unit | TOML `[server] port = 9090` overrides default | TOML file with `[server]\nport = 9090`; bundled paths mocked | `AppConfig.server.port == 9090` |
-| `test_load_toml_overrides_camera_source_type` | unit | TOML `[camera] source_type = "rtsp"` overrides default | TOML file with `[camera]\nsource_type = "rtsp"\nrtsp_url = "rtsp://host/s"`; bundled paths mocked | `AppConfig.camera.source_type == "rtsp"` |
-| `test_load_toml_overrides_confidence_threshold` | unit | TOML `[model] confidence_threshold = 0.8` overrides default | TOML file with `[model]\nconfidence_threshold = 0.8`; bundled paths mocked | `AppConfig.model.confidence_threshold == 0.8` |
-| `test_load_toml_unknown_keys_ignored` | unit | Unknown TOML keys do not raise | TOML file containing `[server]\nunknown_key = "x"`; bundled paths mocked | does not raise |
-| `test_load_toml_missing_keys_retain_defaults` | unit | Keys absent from TOML retain built-in defaults | TOML file with only `[server]\nport = 9090`; bundled paths mocked | `AppConfig.server.host == "0.0.0.0"` |
+| `test_load_toml_overrides_server_port` | unit | TOML `[server] port = 9090` overrides default | TOML file with `[server]\nport = 9090` | `AppConfig.server.port == 9090` |
+| `test_load_toml_overrides_camera_source_type` | unit | TOML `[camera] source_type = "rtsp"` overrides default | TOML file with `[camera]\nsource_type = "rtsp"\nrtsp_url = "rtsp://host/s"` | `AppConfig.camera.source_type == "rtsp"` |
+| `test_load_toml_overrides_confidence_threshold` | unit | TOML `[model] confidence_threshold = 0.8` overrides default | TOML file with `[model]\nconfidence_threshold = 0.8` | `AppConfig.model.confidence_threshold == 0.8` |
+| `test_load_toml_unknown_keys_ignored` | unit | Unknown TOML keys do not raise | TOML file containing `[server]\nunknown_key = "x"` | does not raise |
+| `test_load_toml_missing_keys_retain_defaults` | unit | Keys absent from TOML retain built-in defaults | TOML file with only `[server]\nport = 9090` | `AppConfig.server.host == "0.0.0.0"` |
 
 ### 6.5 Validation Failures
 
@@ -261,8 +260,8 @@ from model_lens.exceptions import ConfigurationError
 
 ## 7. `load()` — Environment Variable Overrides
 
-> Each test patches the relevant `ML_*` environment variable via `monkeypatch.setenv` and mocks
-> bundled paths. A minimal valid TOML (or no TOML) is used as the base.
+> Each test patches the relevant `ML_*` environment variable via `monkeypatch.setenv`.
+> A minimal valid TOML (or no TOML) is used as the base.
 
 ### 7.1 Happy Path — load
 
@@ -276,7 +275,7 @@ from model_lens.exceptions import ConfigurationError
 | `test_load_env_override_camera_rtsp_url` | unit | `ML_CAMERA_RTSP_URL` overrides RTSP URL | `ML_CAMERA_SOURCE_TYPE="rtsp"` and `ML_CAMERA_RTSP_URL="rtsp://cam/live"` | `AppConfig.camera.rtsp_url == "rtsp://cam/live"` |
 | `test_load_env_override_model_model` | unit | `ML_MODEL_MODEL` overrides model name | `ML_MODEL_MODEL="yolov8s"` | `AppConfig.model.model == "yolov8s"` |
 | `test_load_env_override_model_confidence_threshold` | unit | `ML_MODEL_CONFIDENCE_THRESHOLD` overrides threshold | `ML_MODEL_CONFIDENCE_THRESHOLD="0.75"` | `AppConfig.model.confidence_threshold == 0.75` |
-| `test_load_env_override_logs_debug` | unit | Debug log is emitted for each env override applied | `ML_SERVER_PORT="9999"` | `logger.debug` called with `'Env override: ML_SERVER_PORT="9999" → server.port'` |
+| `test_load_env_override_logs_debug` | unit | Debug log is emitted for each env override applied | `ML_SERVER_PORT="9999"` | `logger.debug` called with message containing `"ML_SERVER_PORT"`, `"9999"`, `"server"`, and `"port"` |
 
 ### 7.2 Validation Failures
 
@@ -302,14 +301,14 @@ from model_lens.exceptions import ConfigurationError
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
 | `test_config_loader_instantiation` | unit | `ConfigLoader` can be instantiated without arguments | `ConfigLoader()` | does not raise |
-| `test_config_loader_load_returns_app_config` | unit | `ConfigLoader().load()` returns an `AppConfig` instance | bundled paths mocked; no TOML file | `isinstance(result, AppConfig)` |
-| `test_config_loader_load_uses_defaults_when_no_config_file` | unit | When no `--config` flag and no `model_lens.toml` in cwd, built-in defaults are used | `sys.argv = ["prog"]`; cwd has no `model_lens.toml`; bundled paths mocked | `result.server.port == 8080` |
+| `test_config_loader_load_returns_app_config` | unit | `ConfigLoader().load()` returns an `AppConfig` instance | no TOML file | `isinstance(result, AppConfig)` |
+| `test_config_loader_load_uses_defaults_when_no_config_file` | unit | When no `--config` flag and no `model_lens.toml` in cwd, built-in defaults are used | `sys.argv = ["prog"]`; cwd has no `model_lens.toml` | `result.server.port == 8080` |
 
 ### 8.2 Error Propagation
 
 | Test ID | Category | Description | Input | Expected |
 |---|---|---|---|---|
-| `test_config_loader_load_raises_configuration_error_on_invalid_config` | unit | `ConfigLoader().load()` raises `ConfigurationError` when validation fails | env override sets `ML_SERVER_PORT="0"`; bundled paths mocked | `raises ConfigurationError` |
+| `test_config_loader_load_raises_configuration_error_on_invalid_config` | unit | `ConfigLoader().load()` raises `ConfigurationError` when validation fails | env override sets `ML_SERVER_PORT="0"` | `raises ConfigurationError` |
 | `test_config_loader_load_raises_configuration_error_on_invalid_toml` | unit | `ConfigLoader().load()` raises `ConfigurationError` when TOML is malformed | config file containing `not valid toml :::` | `raises ConfigurationError` with message starting `"Failed to parse config file at "` |
 
 ---

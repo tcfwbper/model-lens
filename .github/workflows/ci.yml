@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.11-slim
+
+    steps:
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            bash \
+            curl \
+            git \
+            build-essential \
+            libgl1 \
+            libglib2.0-0
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        run: bash dev/uv-install.sh
+
+      - name: Create virtual environment
+        run: bash dev/venv-create.sh
+
+      - name: Activate venv and install Python packages
+        run: |
+          . .venv/bin/activate
+          bash dev/bootstrap.sh
+
+      - name: Install nvm and Node.js
+        run: |
+          bash dev/nvm-install.sh
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          bash dev/ui-install.sh
+
+      - name: Run Python tests
+        run: |
+          . .venv/bin/activate
+          bash dev/test.sh --all
+
+      - name: Run frontend tests
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          bash dev/ui-test.sh
+
+      - name: Build frontend assets
+        run: |
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          bash dev/ui-build.sh
+
+      - name: Start server and verify
+        run: |
+          . .venv/bin/activate
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+          bash dev/model-lens-runs.sh &
+          echo "Waiting for server to start..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080 > /dev/null 2>&1; then
+              echo "Server is up!"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Server failed to start within 30 seconds"
+              exit 1
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:8080

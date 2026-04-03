@@ -56,11 +56,8 @@ Template (`model_lens.toml.template`):
 
 [model]
 
-##! Path to the bundled model file. Defaults to the package-data path.
-# model_path = ""
-
-##! Path to the label map file (plain text, one label per line). Defaults to the package-data path.
-# labels_path = ""
+##! YOLO model to inference
+# model = "yolov8n"
 
 ##! Minimum confidence score for a detection to be reported (0.0 – 1.0).
 # confidence_threshold = 0.5
@@ -107,8 +104,7 @@ Examples:
 | `camera.source_type` | `ML_CAMERA_SOURCE_TYPE` |
 | `camera.device_index` | `ML_CAMERA_DEVICE_INDEX` |
 | `camera.rtsp_url` | `ML_CAMERA_RTSP_URL` |
-| `model.model_path` | `ML_MODEL_MODEL_PATH` |
-| `model.labels_path` | `ML_MODEL_LABELS_PATH` |
+| `model.model` | `ML_MODEL_MODEL` |
 | `model.confidence_threshold` | `ML_MODEL_CONFIDENCE_THRESHOLD` |
 
 Type coercion rules for env vars:
@@ -148,8 +144,7 @@ Fixed at startup; cannot be changed at runtime.
 
 | Key | Type | Default | Validation |
 |---|---|---|---|
-| `model_path` | `str` | `""` (resolves to package-data path) | Absolute path or empty string |
-| `labels_path` | `str` | `""` (resolves to package-data path) | Absolute path or empty string |
+| `model` | `str` | `"yolov8n"` | Valid YOLO model |
 | `confidence_threshold` | `float` | `0.5` | `0.0 < value <= 1.0` |
 
 ---
@@ -166,10 +161,6 @@ Fixed at startup; cannot be changed at runtime.
   ```
 
 - `camera.rtsp_url` is only validated (non-empty check) when `camera.source_type = "rtsp"`.
-- `model.model_path` is only validated (path exists) when it is non-empty; an empty string causes
-  the server to fall back to the bundled package-data model.
-- `model.labels_path` is only validated (path exists) when it is non-empty; an empty string causes
-  the server to fall back to the bundled package-data label map.
 
 ---
 
