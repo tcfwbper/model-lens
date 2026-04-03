@@ -38,8 +38,8 @@ A lightweight AI demo tool that streams frames from a camera source, runs object
 ### Install from PyPI
 
 ```bash
-pip install model-lens
-model_lens --host=0.0.0.0 --port=8080
+pip install model_lens
+bash dev/model-lens-runs.sh
 ```
 
 ### Development Setup
