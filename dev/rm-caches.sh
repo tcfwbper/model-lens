@@ -7,8 +7,4 @@ rm -rf .mypy_cache
 rm -rf .pytest_cache
 rm -rf .cache
 rm -rf .ruff_cache
-rm -rf .aider.tags.cache*
-rm -rf .aider.chat.history.md
-rm -rf .aider.input.history
-rm -rf .claude
 rm -rf .vite

@@ -1,4 +1,4 @@
-# Architecture for ModelLens
+# Architecture
 
 ## Purpose
 
@@ -7,8 +7,6 @@ ModelLens is a lightweight AI demo tool that:
 1. Streams frames from a camera source (local webcam or RTSP/IP camera).
 2. Runs a bundled object-detection model against each frame to determine whether specific objects are present.
 3. Exposes a browser-based web UI for configuring the camera source and the target object labels — without restarting the server.
-
----
 
 ## System Overview
 
@@ -37,8 +35,6 @@ ModelLens is a lightweight AI demo tool that:
 └──────────────────────────────────────────────────────────┘
 ```
 
----
-
 ## Components
 
 ### Web Server
@@ -59,8 +55,6 @@ Abstracts over local (webcam) and RTSP camera sources. Recreated when the camera
 ### InferenceEngine
 Loads a bundled model file and its corresponding label map once at startup, then produces detection results for each frame. Raw model output indices are translated to human-readable label strings using the label map before being returned as `DetectionResult` objects. The model, label map, and confidence threshold are fixed at startup and cannot be changed at runtime. Designed as an abstract base to allow future backend alternatives without touching other components.
 
----
-
 ## Entities
 
 ### CameraConfig
@@ -75,16 +69,12 @@ A single detected object: label, confidence score, bounding box, and whether the
 ### Frame
 A raw image buffer as captured from the camera, passed between CameraCapture and InferenceEngine.
 
----
-
 ## Extensibility Notes
 
 | Capability | Addition point |
 |---|---|
 | Persist config across restarts | Add a Config Store behind the existing Config API |
-| Pull assets from external storage. Either from local path or S3 | Add an asset-sync step in the server startup hook |
-
----
+| Pull assets from external storage (local path or S3) | Add an asset-sync step in the server startup hook |
 
 ## Constraints
 
