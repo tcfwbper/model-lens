@@ -1,5 +1,11 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 
 /**
  * Test Specification: TargetLabels.test.tsx
@@ -24,7 +30,9 @@ function renderTargetLabels(props: Partial<TargetLabelsProps> = {}) {
 
 function openDropdown() {
   // Click the trigger button to open dropdown
-  const trigger = screen.getByRole("button", { name: /labels selected|No labels selected|All labels selected/i });
+  const trigger = screen.getByRole("button", {
+    name: /labels selected|No labels selected|All labels selected/i,
+  });
   fireEvent.click(trigger);
 }
 
@@ -128,14 +136,14 @@ describe("TargetLabels", () => {
           validLabels={["cat", "dog"]}
           activeLabels={["cat"]}
           onUpdate={vi.fn(() => Promise.resolve())}
-        />
+        />,
       );
       rerender(
         <TargetLabels
           validLabels={["cat", "dog"]}
           activeLabels={["dog"]}
           onUpdate={vi.fn(() => Promise.resolve())}
-        />
+        />,
       );
       // Trigger should now show 1 label selected — "dog" only
       expect(screen.getByText("1 labels selected")).toBeInTheDocument();
@@ -152,10 +160,43 @@ describe("TargetLabels", () => {
       expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
     });
 
+    it("dropdown_closes_on_submit", async () => {
+      let resolveUpdate: () => void;
+      const onUpdate = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveUpdate = resolve;
+          }),
+      );
+      renderTargetLabels({
+        validLabels: ["cat", "dog"],
+        activeLabels: ["cat"],
+        onUpdate,
+      });
+      openDropdown();
+      // Verify dropdown is open
+      expect(screen.getAllByRole("checkbox").length).toBeGreaterThan(0);
+      // Toggle "dog" to make dirty
+      fireEvent.click(screen.getByLabelText("dog"));
+      const updateBtn = screen.getByRole("button", { name: /update labels/i });
+      fireEvent.click(updateBtn);
+
+      // Dropdown should be hidden immediately (before promise resolves)
+      expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+
+      // Cleanup
+      await act(async () => {
+        resolveUpdate!();
+      });
+    });
+
     it("updating_flag_disables_button_during_submit", async () => {
       let resolveUpdate: () => void;
       const onUpdate = vi.fn(
-        () => new Promise<void>((resolve) => { resolveUpdate = resolve; })
+        () =>
+          new Promise<void>((resolve) => {
+            resolveUpdate = resolve;
+          }),
       );
       renderTargetLabels({
         validLabels: ["cat", "dog"],
@@ -174,7 +215,9 @@ describe("TargetLabels", () => {
       });
 
       // Cleanup
-      await act(async () => { resolveUpdate!(); });
+      await act(async () => {
+        resolveUpdate!();
+      });
     });
 
     it("updating_flag_resets_after_success", async () => {
@@ -324,6 +367,89 @@ describe("TargetLabels", () => {
       // Selection remains empty, button stays disabled
       const updateBtn = screen.getByRole("button", { name: /update labels/i });
       expect(updateBtn).toBeDisabled();
+    });
+  });
+
+  describe("Happy Path — Styling", () => {
+    it("trigger_button_has_correct_style", () => {
+      renderTargetLabels({
+        validLabels: ["cat"],
+        activeLabels: [],
+      });
+      const trigger = screen.getByRole("button", {
+        name: /no labels selected/i,
+      });
+      expect(trigger.style.width).toBe("100%");
+      expect(["8px 12px", "var(--spacing-sm) var(--spacing-md)"]).toContain(
+        trigger.style.padding,
+      );
+      expect([
+        "#FFFFFF",
+        "#ffffff",
+        "rgb(255, 255, 255)",
+        "var(--color-bg-surface)",
+      ]).toContain(trigger.style.backgroundColor);
+      expect([
+        "1px solid #D4DAE0",
+        "1px solid #d4dae0",
+        "1px solid rgb(212, 218, 224)",
+        "1px solid var(--color-border)",
+      ]).toContain(trigger.style.border);
+      expect(["4px", "var(--radius-sm)"]).toContain(trigger.style.borderRadius);
+      expect(trigger.style.textAlign).toBe("left");
+      expect(trigger.style.cursor).toBe("pointer");
+    });
+
+    it("update_button_enabled_style", () => {
+      renderTargetLabels({
+        validLabels: ["cat", "dog"],
+        activeLabels: ["cat"],
+      });
+      openDropdown();
+      fireEvent.click(screen.getByLabelText("dog"));
+      const updateBtn = screen.getByRole("button", { name: /update labels/i });
+      expect([
+        "#5B8CB8",
+        "#5b8cb8",
+        "rgb(91, 140, 184)",
+        "var(--color-primary)",
+      ]).toContain(updateBtn.style.backgroundColor);
+      expect([
+        "#FFFFFF",
+        "#ffffff",
+        "rgb(255, 255, 255)",
+        "var(--color-white)",
+      ]).toContain(updateBtn.style.color);
+      expect(["4px", "var(--radius-sm)"]).toContain(
+        updateBtn.style.borderRadius,
+      );
+      expect(updateBtn.style.cursor).toBe("pointer");
+      expect(updateBtn.style.width).toBe("100%");
+    });
+
+    it("update_button_disabled_style", () => {
+      renderTargetLabels({
+        validLabels: ["cat"],
+        activeLabels: ["cat"],
+      });
+      const updateBtn = screen.getByRole("button", { name: /update labels/i });
+      expect([
+        "#A8C4DC",
+        "#a8c4dc",
+        "rgb(168, 196, 220)",
+        "var(--color-primary-disabled)",
+      ]).toContain(updateBtn.style.backgroundColor);
+      expect(updateBtn.style.cursor).toBe("default");
+    });
+
+    it("container_has_position_relative", () => {
+      const { container } = renderTargetLabels({
+        validLabels: ["cat"],
+        activeLabels: [],
+      });
+      // The outermost div with the ref
+      const outerDiv = container.firstElementChild as HTMLElement;
+      expect(outerDiv.style.position).toBe("relative");
     });
   });
 });

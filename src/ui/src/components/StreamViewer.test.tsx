@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import {
-  buildFrameData,
-  buildDetection,
-} from "../test-helpers/fixtures";
+import { buildFrameData, buildDetection } from "../test-helpers/fixtures";
 import type { FrameData } from "../test-helpers/fixtures";
 import { createMockCanvas2DContext } from "../test-helpers/mocks";
 import type { MockCanvas2DContext } from "../test-helpers/mocks";
@@ -39,7 +36,9 @@ beforeEach(() => {
   mockUseStreamReturnCalledWith = undefined;
 
   // Mock canvas getContext
-  HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCtx) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = vi.fn(
+    () => mockCtx,
+  ) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 
   // Mock Image constructor
   (globalThis as unknown as { Image: unknown }).Image = class FakeImage {
@@ -79,7 +78,7 @@ describe("StreamViewer", () => {
           sseActive={false}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       expect(screen.getByText("Stream inactive")).toBeVisible();
       const canvas = document.querySelector("canvas");
@@ -95,7 +94,7 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       expect(screen.getByText("Stream inactive")).toBeVisible();
     });
@@ -107,7 +106,7 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       triggerImageLoad();
       const canvas = document.querySelector("canvas");
@@ -121,7 +120,7 @@ describe("StreamViewer", () => {
           sseActive={false}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.75}
-        />
+        />,
       );
       expect(screen.getByText(/Confidence Threshold: 0.75/)).toBeVisible();
     });
@@ -133,9 +132,11 @@ describe("StreamViewer", () => {
           sseActive={false}
           onToggleSSE={vi.fn()}
           confidenceThreshold={null}
-        />
+        />,
       );
-      expect(screen.queryByText(/Confidence Threshold/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Confidence Threshold/),
+      ).not.toBeInTheDocument();
     });
   });
 
@@ -147,7 +148,7 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       triggerImageLoad();
       expect(mockCtx.clearRect).toHaveBeenCalled();
@@ -169,7 +170,7 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       triggerImageLoad();
 
@@ -184,7 +185,7 @@ describe("StreamViewer", () => {
       expect(mockCtx.fillText).toHaveBeenCalledWith(
         expect.stringContaining("cat 87%"),
         expect.any(Number),
-        expect.any(Number)
+        expect.any(Number),
       );
     });
 
@@ -201,7 +202,7 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       triggerImageLoad();
       expect(mockCtx.strokeRect).not.toHaveBeenCalled();
@@ -217,7 +218,9 @@ describe("StreamViewer", () => {
         width = 800;
         height = 450;
         constructor() {
-          mockImageInstances.push(this as unknown as typeof mockImageInstances[0]);
+          mockImageInstances.push(
+            this as unknown as (typeof mockImageInstances)[0],
+          );
           // Simulate both complete=true and onload firing
           setTimeout(() => {
             if (this.onload) this.onload();
@@ -230,7 +233,7 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
 
       // drawImage should be called exactly once (guarded by drawn flag)
@@ -247,7 +250,7 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       unmount();
       // No canvas context methods should be called after unmount
@@ -262,7 +265,7 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       triggerImageLoad();
       expect(mockCtx.drawImage).toHaveBeenCalled();
@@ -278,7 +281,7 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       expect(mockUseStreamReturnCalledWith).toBe(true);
     });
@@ -291,7 +294,7 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={onToggle}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       expect(onToggle).not.toHaveBeenCalled();
     });
@@ -305,12 +308,122 @@ describe("StreamViewer", () => {
           sseActive={true}
           onToggleSSE={vi.fn()}
           confidenceThreshold={0.5}
-        />
+        />,
       );
       triggerImageLoad();
       const canvas = document.querySelector("canvas");
       expect(canvas).toHaveAttribute("width", "800");
       expect(canvas).toHaveAttribute("height", "450");
+    });
+  });
+
+  describe("Happy Path — Styling", () => {
+    it("placeholder_has_idle_style", () => {
+      setMockFrame(null);
+      render(
+        <StreamViewer
+          sseActive={false}
+          onToggleSSE={vi.fn()}
+          confidenceThreshold={0.5}
+        />,
+      );
+      // The placeholder div contains "Stream inactive" text
+      const placeholder = screen
+        .getByText("Stream inactive")
+        .closest("div") as HTMLElement;
+      expect(placeholder.style.width || "100%").toBe("100%");
+      expect(["16/9", "16 / 9", "var(--canvas-aspect)"]).toContain(
+        placeholder.style.aspectRatio,
+      );
+      expect([
+        "#FFFFFF",
+        "#ffffff",
+        "rgb(255, 255, 255)",
+        "var(--color-bg-canvas-idle)",
+        "var(--color-bg-surface)",
+      ]).toContain(
+        placeholder.style.backgroundColor || placeholder.style.background,
+      );
+      expect(["4px", "var(--radius-sm)"]).toContain(
+        placeholder.style.borderRadius,
+      );
+      expect(placeholder.style.display).toBe("flex");
+      expect(placeholder.style.alignItems).toBe("center");
+      expect(placeholder.style.justifyContent).toBe("center");
+      // Check text color on the span or closest styled element
+      const span = screen.getByText("Stream inactive") as HTMLElement;
+      const textColor = span.style.color || placeholder.style.color;
+      expect([
+        "#6B7B8D",
+        "#6b7b8d",
+        "rgb(107, 123, 141)",
+        "var(--color-text-muted)",
+      ]).toContain(textColor);
+    });
+
+    it("canvas_has_correct_css_style", () => {
+      setMockFrame(buildFrameData({ jpeg_b64: "abc", detections: [] }));
+      render(
+        <StreamViewer
+          sseActive={true}
+          onToggleSSE={vi.fn()}
+          confidenceThreshold={0.5}
+        />,
+      );
+      triggerImageLoad();
+      const canvas = document.querySelector("canvas") as HTMLCanvasElement;
+      expect(canvas.style.width).toBe("100%");
+      expect(["16/9", "16 / 9", "var(--canvas-aspect)"]).toContain(
+        canvas.style.aspectRatio,
+      );
+      expect([
+        "#FFFFFF",
+        "#ffffff",
+        "rgb(255, 255, 255)",
+        "var(--color-bg-surface)",
+      ]).toContain(canvas.style.backgroundColor);
+      expect(["4px", "var(--radius-sm)"]).toContain(canvas.style.borderRadius);
+      expect(canvas.style.display).toBe("block");
+    });
+
+    it("canvas_hidden_when_idle", () => {
+      setMockFrame(null);
+      render(
+        <StreamViewer
+          sseActive={false}
+          onToggleSSE={vi.fn()}
+          confidenceThreshold={0.5}
+        />,
+      );
+      const canvas = document.querySelector("canvas") as HTMLCanvasElement;
+      expect(canvas.style.display).toBe("none");
+    });
+
+    it("confidence_threshold_text_style", () => {
+      setMockFrame(null);
+      render(
+        <StreamViewer
+          sseActive={false}
+          onToggleSSE={vi.fn()}
+          confidenceThreshold={0.75}
+        />,
+      );
+      const thresholdEl = screen
+        .getByText(/Confidence Threshold: 0.75/)
+        .closest("div") as HTMLElement;
+      expect(thresholdEl.style.textAlign).toBe("right");
+      expect([
+        "#6B7B8D",
+        "#6b7b8d",
+        "rgb(107, 123, 141)",
+        "var(--color-text-muted)",
+      ]).toContain(thresholdEl.style.color);
+      expect(["0.8rem", "var(--font-size-caption)"]).toContain(
+        thresholdEl.style.fontSize,
+      );
+      expect(["4px", "var(--spacing-xs)"]).toContain(
+        thresholdEl.style.marginTop,
+      );
     });
   });
 });

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import { buildLocalCamera, buildRtspCamera } from "../test-helpers/fixtures";
 import type { CameraConfigData } from "../test-helpers/fixtures";
 
@@ -19,7 +25,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 2 })}
           onUpdate={vi.fn()}
-        />
+        />,
       );
       const numberInput = screen.getByRole("spinbutton") as HTMLInputElement;
       expect(numberInput.value).toBe("2");
@@ -33,7 +39,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildRtspCamera({ rtsp_url: "rtsp://cam" })}
           onUpdate={vi.fn()}
-        />
+        />,
       );
       const textInput = screen.getByRole("textbox") as HTMLInputElement;
       expect(textInput.value).toBe("rtsp://cam");
@@ -58,7 +64,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 3 })}
           onUpdate={vi.fn()}
-        />
+        />,
       );
       const select = screen.getByRole("combobox");
       fireEvent.change(select, { target: { value: "rtsp" } });
@@ -73,13 +79,13 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 0 })}
           onUpdate={vi.fn()}
-        />
+        />,
       );
       rerender(
         <CameraConfig
           camera={buildRtspCamera({ rtsp_url: "rtsp://new" })}
           onUpdate={vi.fn()}
-        />
+        />,
       );
       const select = screen.getByRole("combobox") as HTMLSelectElement;
       expect(select.value).toBe("rtsp");
@@ -91,13 +97,16 @@ describe("CameraConfig", () => {
       // Setup: onUpdate returns a pending promise
       let resolveUpdate: () => void;
       const onUpdate = vi.fn(
-        () => new Promise<void>((resolve) => { resolveUpdate = resolve; })
+        () =>
+          new Promise<void>((resolve) => {
+            resolveUpdate = resolve;
+          }),
       );
       render(
         <CameraConfig
           camera={buildLocalCamera({ device_index: 0 })}
           onUpdate={onUpdate}
-        />
+        />,
       );
       // Make dirty
       const input = screen.getByRole("spinbutton") as HTMLInputElement;
@@ -112,7 +121,9 @@ describe("CameraConfig", () => {
       });
 
       // Cleanup
-      await act(async () => { resolveUpdate!(); });
+      await act(async () => {
+        resolveUpdate!();
+      });
     });
 
     it("updating_flag_resets_after_success", async () => {
@@ -121,7 +132,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 0 })}
           onUpdate={onUpdate}
-        />
+        />,
       );
       const input = screen.getByRole("spinbutton");
       fireEvent.change(input, { target: { value: "5" } });
@@ -140,7 +151,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 0 })}
           onUpdate={onUpdate}
-        />
+        />,
       );
       const input = screen.getByRole("spinbutton");
       fireEvent.change(input, { target: { value: "5" } });
@@ -152,7 +163,9 @@ describe("CameraConfig", () => {
 
       expect(button).toHaveTextContent("Update Camera");
       // Fields retain their value
-      expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("5");
+      expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe(
+        "5",
+      );
     });
   });
 
@@ -162,7 +175,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 0 })}
           onUpdate={vi.fn()}
-        />
+        />,
       );
       const button = screen.getByRole("button", { name: /update camera/i });
       expect(button).toBeDisabled();
@@ -173,7 +186,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 0 })}
           onUpdate={vi.fn()}
-        />
+        />,
       );
       const input = screen.getByRole("spinbutton");
       fireEvent.change(input, { target: { value: "3" } });
@@ -186,7 +199,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 0 })}
           onUpdate={vi.fn()}
-        />
+        />,
       );
       const select = screen.getByRole("combobox");
       fireEvent.change(select, { target: { value: "rtsp" } });
@@ -201,7 +214,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildRtspCamera({ rtsp_url: "rtsp://old" })}
           onUpdate={vi.fn()}
-        />
+        />,
       );
       const textInput = screen.getByRole("textbox");
       fireEvent.change(textInput, { target: { value: "rtsp://new" } });
@@ -225,7 +238,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 0 })}
           onUpdate={onUpdate}
-        />
+        />,
       );
       const input = screen.getByRole("spinbutton");
       fireEvent.change(input, { target: { value: "2" } });
@@ -247,7 +260,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildRtspCamera({ rtsp_url: "rtsp://old" })}
           onUpdate={onUpdate}
-        />
+        />,
       );
       const textInput = screen.getByRole("textbox");
       fireEvent.change(textInput, { target: { value: "rtsp://new" } });
@@ -270,7 +283,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 0 })}
           onUpdate={vi.fn()}
-        />
+        />,
       );
       const input = screen.getByRole("spinbutton");
       fireEvent.change(input, { target: { value: "abc" } });
@@ -284,7 +297,7 @@ describe("CameraConfig", () => {
         <CameraConfig
           camera={buildLocalCamera({ device_index: 0 })}
           onUpdate={onUpdate}
-        />
+        />,
       );
       const input = screen.getByRole("spinbutton");
       fireEvent.change(input, { target: { value: "abc" } });
@@ -298,6 +311,125 @@ describe("CameraConfig", () => {
         source_type: "local",
         device_index: NaN,
       });
+    });
+  });
+
+  describe("Happy Path — Styling", () => {
+    it("container_has_card_style", () => {
+      const { container } = render(
+        <CameraConfig
+          camera={buildLocalCamera({ device_index: 0 })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      const containerDiv = container.firstElementChild as HTMLElement;
+      expect([
+        "#FFFFFF",
+        "#ffffff",
+        "rgb(255, 255, 255)",
+        "var(--color-bg-surface)",
+      ]).toContain(
+        containerDiv.style.backgroundColor || containerDiv.style.background,
+      );
+      expect([
+        "1px solid #D4DAE0",
+        "1px solid #d4dae0",
+        "1px solid rgb(212, 218, 224)",
+        "1px solid var(--color-border)",
+      ]).toContain(containerDiv.style.border);
+      expect(["8px", "var(--radius-md)"]).toContain(
+        containerDiv.style.borderRadius,
+      );
+      expect(["16px", "var(--spacing-lg)"]).toContain(
+        containerDiv.style.padding,
+      );
+      expect(containerDiv.style.display).toBe("flex");
+      expect(containerDiv.style.alignItems).toBe("center");
+      expect(["12px", "var(--spacing-md)"]).toContain(containerDiv.style.gap);
+    });
+
+    it("update_button_enabled_style", () => {
+      render(
+        <CameraConfig
+          camera={buildLocalCamera({ device_index: 0 })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      // Make dirty to enable button
+      const input = screen.getByRole("spinbutton");
+      fireEvent.change(input, { target: { value: "5" } });
+      const button = screen.getByRole("button", { name: /update camera/i });
+      expect([
+        "#5B8CB8",
+        "#5b8cb8",
+        "rgb(91, 140, 184)",
+        "var(--color-primary)",
+      ]).toContain(button.style.backgroundColor);
+      expect([
+        "#FFFFFF",
+        "#ffffff",
+        "rgb(255, 255, 255)",
+        "var(--color-white)",
+      ]).toContain(button.style.color);
+      expect(button.style.borderStyle).toBe("none");
+      expect(["4px", "var(--radius-sm)"]).toContain(button.style.borderRadius);
+      expect(button.style.cursor).toBe("pointer");
+    });
+
+    it("update_button_disabled_style", () => {
+      render(
+        <CameraConfig
+          camera={buildLocalCamera({ device_index: 0 })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      const button = screen.getByRole("button", { name: /update camera/i });
+      expect([
+        "#A8C4DC",
+        "#a8c4dc",
+        "rgb(168, 196, 220)",
+        "var(--color-primary-disabled)",
+      ]).toContain(button.style.backgroundColor);
+      expect(button.style.cursor).toBe("default");
+    });
+
+    it("select_has_input_style", () => {
+      render(
+        <CameraConfig
+          camera={buildLocalCamera({ device_index: 0 })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      const select = screen.getByRole("combobox") as HTMLSelectElement;
+      expect([
+        "1px solid #D4DAE0",
+        "1px solid #d4dae0",
+        "1px solid rgb(212, 218, 224)",
+        "1px solid var(--color-border)",
+      ]).toContain(select.style.border);
+      expect(["4px", "var(--radius-sm)"]).toContain(select.style.borderRadius);
+    });
+
+    it("device_index_input_has_fixed_width", () => {
+      render(
+        <CameraConfig
+          camera={buildLocalCamera({ device_index: 0 })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      const input = screen.getByRole("spinbutton") as HTMLInputElement;
+      expect(input.style.width).toBe("120px");
+    });
+
+    it("rtsp_input_has_flex_1", () => {
+      render(
+        <CameraConfig
+          camera={buildRtspCamera({ rtsp_url: "rtsp://cam" })}
+          onUpdate={vi.fn()}
+        />,
+      );
+      const input = screen.getByRole("textbox") as HTMLInputElement;
+      expect(["1", "1 1 0%"]).toContain(input.style.flex);
     });
   });
 });

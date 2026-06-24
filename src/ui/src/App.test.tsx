@@ -119,14 +119,21 @@ describe("App", () => {
       });
       render(<App />);
       const targetLabels = screen.getByTestId("target-labels");
-      expect(JSON.parse(targetLabels.dataset.validLabels!)).toEqual(["cat", "dog"]);
+      expect(JSON.parse(targetLabels.dataset.validLabels!)).toEqual([
+        "cat",
+        "dog",
+      ]);
       expect(JSON.parse(targetLabels.dataset.activeLabels!)).toEqual(["cat"]);
     });
 
     it("renders_start_and_stop_buttons", () => {
       render(<App />);
-      expect(screen.getByRole("button", { name: /start stream/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /stop stream/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /start stream/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /stop stream/i }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -150,19 +157,27 @@ describe("App", () => {
       fireEvent.click(screen.getByRole("button", { name: /stop stream/i }));
       const streamViewer = screen.getByTestId("stream-viewer");
       expect(streamViewer.dataset.sseActive).toBe("false");
-      expect(screen.getByRole("button", { name: /start stream/i })).not.toBeDisabled();
-      expect(screen.getByRole("button", { name: /stop stream/i })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /start stream/i }),
+      ).not.toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /stop stream/i }),
+      ).toBeDisabled();
     });
 
     it("start_button_disabled_when_sse_active", () => {
       render(<App />);
       fireEvent.click(screen.getByRole("button", { name: /start stream/i }));
-      expect(screen.getByRole("button", { name: /start stream/i })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /start stream/i }),
+      ).toBeDisabled();
     });
 
     it("stop_button_disabled_when_sse_inactive", () => {
       render(<App />);
-      expect(screen.getByRole("button", { name: /stop stream/i })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /stop stream/i }),
+      ).toBeDisabled();
     });
   });
 
@@ -217,6 +232,168 @@ describe("App", () => {
       render(<App />);
       const streamViewer = screen.getByTestId("stream-viewer");
       expect(streamViewer.dataset.sseActive).toBe("false");
+    });
+  });
+
+  describe("Happy Path — Page-Level Styling", () => {
+    it("root_div_has_min_height_100vh", () => {
+      const { container } = render(<App />);
+      const rootDiv = container.firstElementChild as HTMLElement;
+      expect(rootDiv.style.minHeight).toBe("100vh");
+    });
+
+    it("root_div_has_page_background_color", () => {
+      const { container } = render(<App />);
+      const rootDiv = container.firstElementChild as HTMLElement;
+      expect([
+        "#F5F6F8",
+        "#f5f6f8",
+        "rgb(245, 246, 248)",
+        "var(--color-bg-page)",
+      ]).toContain(rootDiv.style.backgroundColor);
+    });
+
+    it("root_div_has_font_family", () => {
+      const { container } = render(<App />);
+      const rootDiv = container.firstElementChild as HTMLElement;
+      expect([
+        "system-ui, -apple-system, sans-serif",
+        "var(--font-family)",
+      ]).toContain(rootDiv.style.fontFamily);
+    });
+  });
+
+  describe("Happy Path — Button Styling", () => {
+    it("start_button_enabled_style", () => {
+      render(<App />);
+      const startBtn = screen.getByRole("button", { name: /start stream/i });
+      expect([
+        "#5B8CB8",
+        "#5b8cb8",
+        "rgb(91, 140, 184)",
+        "var(--color-primary)",
+      ]).toContain(startBtn.style.backgroundColor);
+      expect([
+        "#FFFFFF",
+        "#ffffff",
+        "rgb(255, 255, 255)",
+        "var(--color-white)",
+      ]).toContain(startBtn.style.color);
+      expect(startBtn.style.borderStyle).toBe("none");
+      expect(["4px", "var(--radius-sm)"]).toContain(
+        startBtn.style.borderRadius,
+      );
+      expect(startBtn.style.cursor).toBe("pointer");
+    });
+
+    it("start_button_disabled_style", () => {
+      render(<App />);
+      // Click start to make it disabled
+      fireEvent.click(screen.getByRole("button", { name: /start stream/i }));
+      const startBtn = screen.getByRole("button", { name: /start stream/i });
+      expect([
+        "#A8C4DC",
+        "#a8c4dc",
+        "rgb(168, 196, 220)",
+        "var(--color-primary-disabled)",
+      ]).toContain(startBtn.style.backgroundColor);
+      expect(startBtn.style.cursor).toBe("default");
+    });
+
+    it("stop_button_enabled_style", () => {
+      render(<App />);
+      // Click start first to enable stop
+      fireEvent.click(screen.getByRole("button", { name: /start stream/i }));
+      const stopBtn = screen.getByRole("button", { name: /stop stream/i });
+      expect([
+        "#6B7B8D",
+        "#6b7b8d",
+        "rgb(107, 123, 141)",
+        "var(--color-secondary)",
+      ]).toContain(stopBtn.style.backgroundColor);
+      expect([
+        "#FFFFFF",
+        "#ffffff",
+        "rgb(255, 255, 255)",
+        "var(--color-white)",
+      ]).toContain(stopBtn.style.color);
+      expect(stopBtn.style.borderStyle).toBe("none");
+      expect(["4px", "var(--radius-sm)"]).toContain(stopBtn.style.borderRadius);
+      expect(stopBtn.style.cursor).toBe("pointer");
+    });
+
+    it("stop_button_disabled_style", () => {
+      render(<App />);
+      const stopBtn = screen.getByRole("button", { name: /stop stream/i });
+      expect([
+        "#D4DAE0",
+        "#d4dae0",
+        "rgb(212, 218, 224)",
+        "var(--color-secondary-disabled)",
+      ]).toContain(stopBtn.style.backgroundColor);
+      expect(stopBtn.style.cursor).toBe("default");
+    });
+  });
+
+  describe("Happy Path — Layout Structure", () => {
+    it("content_area_has_correct_padding", () => {
+      const { container } = render(<App />);
+      const rootDiv = container.firstElementChild as HTMLElement;
+      // Content area is the first non-header child div of root
+      const children = Array.from(rootDiv.children) as HTMLElement[];
+      const contentArea = children.find(
+        (el) =>
+          el.getAttribute("data-testid") !== "header" && el.tagName === "DIV",
+      );
+      expect(contentArea).toBeDefined();
+      expect(["16px 24px", "var(--spacing-lg) var(--spacing-xl)"]).toContain(
+        contentArea!.style.padding,
+      );
+    });
+
+    it("two_column_layout_with_flex", () => {
+      const { container } = render(<App />);
+      // The two-column container uses display:flex and gap
+      // Find it by looking for a flex container with gap among descendants
+      const allDivs = container.querySelectorAll("div[style]");
+      let twoColContainer: HTMLElement | null = null;
+      allDivs.forEach((el) => {
+        const htmlEl = el as HTMLElement;
+        if (htmlEl.style.display === "flex" && htmlEl.style.gap) {
+          // The two-column container has exactly two child divs with flex values
+          const childDivs = htmlEl.querySelectorAll(":scope > div");
+          if (childDivs.length === 2) {
+            twoColContainer = htmlEl;
+          }
+        }
+      });
+      expect(twoColContainer).not.toBeNull();
+      expect((twoColContainer as unknown as HTMLElement).style.display).toBe(
+        "flex",
+      );
+      expect(["16px", "var(--spacing-lg)"]).toContain(
+        (twoColContainer as unknown as HTMLElement).style.gap,
+      );
+      const cols = Array.from(
+        (twoColContainer as unknown as HTMLElement).children,
+      ) as HTMLElement[];
+      expect(["2", "2 1 0%"]).toContain(cols[0].style.flex);
+      expect(["1", "1 1 0%"]).toContain(cols[1].style.flex);
+    });
+
+    it("button_row_has_gap", () => {
+      render(<App />);
+      // The button row contains Start and Stop stream buttons side by side
+      const startBtn = screen.getByRole("button", { name: /start stream/i });
+      const buttonRow = startBtn.parentElement as HTMLElement;
+      expect(buttonRow.style.display).toBe("flex");
+      expect(["8px", "var(--spacing-sm)"]).toContain(buttonRow.style.gap);
+      // Both buttons should have flex: 1
+      const buttons = buttonRow.querySelectorAll("button");
+      buttons.forEach((btn) => {
+        const htmlBtn = btn as HTMLElement;
+        expect(["1", "1 1 0%"]).toContain(htmlBtn.style.flex);
+      });
     });
   });
 });
