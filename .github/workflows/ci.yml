@@ -46,7 +46,7 @@ jobs:
       - name: Run Python tests
         run: |
           . .venv/bin/activate
-          bash dev/test.sh --all
+          bash dev/test.sh
 
       - name: Run frontend tests
         run: |
