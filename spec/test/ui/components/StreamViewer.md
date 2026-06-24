@@ -48,3 +48,12 @@
 | Test ID | Category | Description | Setup | Input | Expected |
 |---|---|---|---|---|---|
 | `canvas_has_fixed_logical_dimensions` | `unit` | Canvas element has width=800 and height=450 attributes. | Mock `useStream` to return a valid frame. Mock `Image` onload. | Render with `sseActive={true}`. | Canvas element has `width` attribute `800` and `height` attribute `450`. |
+
+### Happy Path — Styling
+
+| Test ID | Category | Description | Setup | Input | Expected |
+|---|---|---|---|---|---|
+| `placeholder_has_idle_style` | `unit` | Idle placeholder div has correct styling from tokens. | Mock `useStream` to return `{ frame: null }`. | Render `<StreamViewer sseActive={false} onToggleSSE={vi.fn()} confidenceThreshold={0.5} />` | Placeholder has `width: 100%`, `aspectRatio` of `16/9`, `backgroundColor` of `#FFFFFF`, `borderRadius` of `4px`, `display: flex`, `alignItems: center`, `justifyContent: center`, `color` of `#6B7B8D`. |
+| `canvas_has_correct_css_style` | `unit` | Canvas element has responsive CSS styles. | Mock `useStream` to return a valid frame. Mock `Image` onload. | Render with `sseActive={true}`. | Canvas element has CSS `width: 100%`, `aspectRatio` of `16/9`, `backgroundColor` of `#FFFFFF`, `borderRadius` of `4px`, `display: block`. |
+| `canvas_hidden_when_idle` | `unit` | Canvas has display none when inactive. | Mock `useStream` to return `{ frame: null }`. | Render `<StreamViewer sseActive={false} onToggleSSE={vi.fn()} confidenceThreshold={0.5} />` | Canvas element has `display: none`. |
+| `confidence_threshold_text_style` | `unit` | Confidence threshold text has correct style. | Mock `useStream` to return `{ frame: null }`. | Render `<StreamViewer sseActive={false} onToggleSSE={vi.fn()} confidenceThreshold={0.75} />` | Threshold text element has `textAlign: right`, `color` of `#6B7B8D`, `fontSize` of `0.8rem`, `marginTop` of `4px`. |

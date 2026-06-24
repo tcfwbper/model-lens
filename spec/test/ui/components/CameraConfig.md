@@ -51,3 +51,14 @@
 |---|---|---|---|---|---|
 | `non_numeric_device_index_enables_button` | `unit` | Non-numeric text in device index field enables button (treated as dirty). | Render with `camera={{ source_type: "local", device_index: 0 }}`. | Type `"abc"` in device index input. | "Update Camera" button is enabled. |
 | `submits_nan_for_non_numeric_device_index` | `unit` | Non-numeric device index submits NaN as device_index value. | Render with `camera={{ source_type: "local", device_index: 0 }}`. `onUpdate` is `vi.fn(() => Promise.resolve())`. | Type `"abc"` in device index, click "Update Camera". | `onUpdate` called with `{ source_type: "local", device_index: NaN }`. |
+
+### Happy Path — Styling
+
+| Test ID | Category | Description | Setup | Input | Expected |
+|---|---|---|---|---|---|
+| `container_has_card_style` | `unit` | Container div applies card-level design token styles. | | Render `<CameraConfig camera={{ source_type: "local", device_index: 0 }} onUpdate={vi.fn()} />` | Container has `backgroundColor` of `#FFFFFF`, `border` of `1px solid #D4DAE0`, `borderRadius` of `8px`, `padding` of `16px`, `display: flex`, `alignItems: center`, `gap` of `12px`. |
+| `update_button_enabled_style` | `unit` | Update Camera button has primary color when enabled. | Render with `camera={{ source_type: "local", device_index: 0 }}`. | Change device index to `"5"`. Inspect "Update Camera" button. | Button has `backgroundColor` of `#5B8CB8` (or `var(--color-primary)`), `color` of `#FFFFFF`, `borderStyle` of `"none"`, `borderRadius` of `4px`, `cursor: pointer`. |
+| `update_button_disabled_style` | `unit` | Update Camera button has disabled color when clean. | | Render `<CameraConfig camera={{ source_type: "local", device_index: 0 }} onUpdate={vi.fn()} />` | Button has `backgroundColor` of `#A8C4DC` (or `var(--color-primary-disabled)`), `cursor: default`. |
+| `select_has_input_style` | `unit` | Source type select applies input design token styles. | | Render `<CameraConfig camera={{ source_type: "local", device_index: 0 }} onUpdate={vi.fn()} />` | Select element has `border` of `1px solid #D4DAE0`, `borderRadius` of `4px`. |
+| `device_index_input_has_fixed_width` | `unit` | Device index input has width 120px. | | Render `<CameraConfig camera={{ source_type: "local", device_index: 0 }} onUpdate={vi.fn()} />` | Device index input has `width` of `120px`. |
+| `rtsp_input_has_flex_1` | `unit` | RTSP URL input fills remaining space. | | Render `<CameraConfig camera={{ source_type: "rtsp", rtsp_url: "rtsp://cam" }} onUpdate={vi.fn()} />` | RTSP URL input has `flex: 1`. |

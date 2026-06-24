@@ -44,3 +44,28 @@
 | `calls_update_camera_via_camera_config` | `unit` | CameraConfig onUpdate callback calls useConfig's updateCamera. | Mock `useConfig` with `updateCamera` as `vi.fn()`. Render `<App />`. | Trigger CameraConfig's `onUpdate` with `{ source_type: "rtsp", rtsp_url: "rtsp://x" }`. | `updateCamera` was called with `{ source_type: "rtsp", rtsp_url: "rtsp://x" }`. |
 | `calls_update_labels_via_target_labels` | `unit` | TargetLabels onUpdate callback calls useConfig's updateLabels. | Mock `useConfig` with `updateLabels` as `vi.fn()`. Render `<App />`. | Trigger TargetLabels' `onUpdate` with `["cat","dog"]`. | `updateLabels` was called with `["cat","dog"]`. |
 | `sse_active_default_false` | `unit` | sseActive defaults to false on initial render (stream not auto-started). | Mock `useConfig` to return default state. | Render `<App />` | StreamViewer receives `sseActive` as `false`. |
+
+### Happy Path — Page-Level Styling
+
+| Test ID | Category | Description | Setup | Input | Expected |
+|---|---|---|---|---|---|
+| `root_div_has_min_height_100vh` | `unit` | Root div applies minHeight 100vh. | Mock `useConfig` to return default state. | Render `<App />` | Root container element has inline style `minHeight: "100vh"`. |
+| `root_div_has_page_background_color` | `unit` | Root div uses page background color token. | Mock `useConfig` to return default state. | Render `<App />` | Root container element has inline style `backgroundColor` set to `var(--color-bg-page)` or the resolved value `#F5F6F8`. |
+| `root_div_has_font_family` | `unit` | Root div applies font-family token. | Mock `useConfig` to return default state. | Render `<App />` | Root container element has inline style `fontFamily` set to `var(--font-family)` or the resolved value `system-ui, -apple-system, sans-serif`. |
+
+### Happy Path — Button Styling
+
+| Test ID | Category | Description | Setup | Input | Expected |
+|---|---|---|---|---|---|
+| `start_button_enabled_style` | `unit` | Start button has primary background color when enabled. | Mock `useConfig` to return default state. | Render `<App />` | Start Stream button has `backgroundColor` of `var(--color-primary)` or `#5B8CB8`, `color` of `#FFFFFF`, `borderStyle` of `"none"`, `borderRadius` of `4px`, `cursor` of `pointer`. |
+| `start_button_disabled_style` | `unit` | Start button has primary-disabled background when disabled. | Mock `useConfig` to return default state. Render `<App />`. Click "Start Stream". | Inspect Start button. | Start Stream button has `backgroundColor` of `var(--color-primary-disabled)` or `#A8C4DC`, `cursor` of `default`. |
+| `stop_button_enabled_style` | `unit` | Stop button has secondary background color when enabled. | Mock `useConfig` to return default state. Render `<App />`. Click "Start Stream". | Inspect Stop button. | Stop Stream button has `backgroundColor` of `var(--color-secondary)` or `#6B7B8D`, `color` of `#FFFFFF`, `borderStyle` of `"none"`, `borderRadius` of `4px`, `cursor` of `pointer`. |
+| `stop_button_disabled_style` | `unit` | Stop button has secondary-disabled background when disabled. | Mock `useConfig` to return default state. | Render `<App />` | Stop Stream button has `backgroundColor` of `var(--color-secondary-disabled)` or `#D4DAE0`, `cursor` of `default`. |
+
+### Happy Path — Layout Structure
+
+| Test ID | Category | Description | Setup | Input | Expected |
+|---|---|---|---|---|---|
+| `content_area_has_correct_padding` | `unit` | Content area below header has correct padding. | Mock `useConfig` to return default state. | Render `<App />` | Content area has padding matching `16px 24px` (or `var(--spacing-lg) var(--spacing-xl)`). |
+| `two_column_layout_with_flex` | `unit` | Two-column layout uses flex with correct proportions. | Mock `useConfig` to return default state. | Render `<App />` | Two-column container is `display: flex` with `gap: 16px`. Left column has `flex: 2`, right column has `flex: 1`. |
+| `button_row_has_gap` | `unit` | Button row container has flex display with 8px gap. | Mock `useConfig` to return default state. | Render `<App />` | Button row container has `display: flex` and `gap: 8px`. Both buttons have `flex: 1`. |
