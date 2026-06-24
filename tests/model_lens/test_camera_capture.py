@@ -219,7 +219,7 @@ class TestLocalCameraDependencyInteraction:
         camera = LocalCamera(config)
 
         # Replace lock with a spy
-        spy_lock = MagicMock(spec=threading.Lock)
+        spy_lock = MagicMock(spec=threading.Lock())
         spy_lock.acquire.return_value = True
         camera._lock = spy_lock
 
@@ -424,7 +424,7 @@ class TestRetryReadHappyPath:
         mocker.patch("model_lens.camera_capture.time.time", return_value=5000.0)
         mock_sleep = mocker.patch("model_lens.camera_capture.time.sleep")
 
-        mock_lock = MagicMock(spec=threading.Lock)
+        mock_lock = MagicMock(spec=threading.Lock())
         mock_lock.acquire.return_value = True
         reopen_fn = MagicMock()
 
@@ -446,7 +446,7 @@ class TestRetryReadHappyPath:
         mock_sleep = mocker.patch("model_lens.camera_capture.time.sleep")
         mocker.patch("model_lens.camera_capture.random.uniform", return_value=0.5)
 
-        mock_lock = MagicMock(spec=threading.Lock)
+        mock_lock = MagicMock(spec=threading.Lock())
         mock_lock.acquire.return_value = True
         fresh_cap = MagicMock()
         fresh_cap.read.return_value = (True, fake_array)
@@ -467,7 +467,7 @@ class TestRetryReadHappyPath:
         mock_sleep = mocker.patch("model_lens.camera_capture.time.sleep")
         mocker.patch("model_lens.camera_capture.random.uniform", return_value=0.0)
 
-        mock_lock = MagicMock(spec=threading.Lock)
+        mock_lock = MagicMock(spec=threading.Lock())
         mock_lock.acquire.return_value = True
 
         # After each reopen, the cap returned by reopen_fn is used for next read
@@ -501,7 +501,7 @@ class TestRetryReadErrorPropagation:
         mocker.patch("model_lens.camera_capture.time.sleep")
         mocker.patch("model_lens.camera_capture.random.uniform", return_value=0.0)
 
-        mock_lock = MagicMock(spec=threading.Lock)
+        mock_lock = MagicMock(spec=threading.Lock())
         mock_lock.acquire.return_value = True
 
         fresh_cap = MagicMock()
@@ -529,7 +529,7 @@ class TestRetryReadDependencyInteraction:
         mocker.patch("model_lens.camera_capture.time.time", return_value=1000.0)
         mocker.patch("model_lens.camera_capture.random.uniform", return_value=0.0)
 
-        mock_lock = MagicMock(spec=threading.Lock)
+        mock_lock = MagicMock(spec=threading.Lock())
         mock_lock.acquire.return_value = True
 
         fresh_cap = MagicMock()
@@ -548,7 +548,7 @@ class TestRetryReadDependencyInteraction:
         mocker.patch("model_lens.camera_capture.time.sleep")
         mocker.patch("model_lens.camera_capture.random.uniform", return_value=0.0)
 
-        mock_lock = MagicMock(spec=threading.Lock)
+        mock_lock = MagicMock(spec=threading.Lock())
         mock_lock.acquire.return_value = True
 
         fresh_cap = MagicMock()
@@ -619,7 +619,7 @@ class TestRetryReadDependencyInteraction:
         mock_sleep = mocker.patch("model_lens.camera_capture.time.sleep")
         mocker.patch("model_lens.camera_capture.random.uniform", return_value=0.25)
 
-        mock_lock = MagicMock(spec=threading.Lock)
+        mock_lock = MagicMock(spec=threading.Lock())
         mock_lock.acquire.return_value = True
 
         fresh_cap = MagicMock()
@@ -652,7 +652,7 @@ class TestRetryReadDependencyInteraction:
         mocker.patch("model_lens.camera_capture.time.time", side_effect=tracked_time)
         mocker.patch("model_lens.camera_capture.random.uniform", return_value=0.0)
 
-        mock_lock = MagicMock(spec=threading.Lock)
+        mock_lock = MagicMock(spec=threading.Lock())
         mock_lock.acquire.return_value = True
         reopen_fn = MagicMock()
 
