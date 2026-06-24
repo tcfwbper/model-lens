@@ -4,16 +4,18 @@
 
 ### Backend (Python)
 - Language: Python 3.11+
-- Linter / Formatter: `ruff` (covers style, import ordering, docstrings, and formatting)
-- Type Checker: `mypy` (strict mode)
-- Test Runner: `pytest` with `pytest-cov` and `pytest-mock`
+- Acceptance criterion: run `bash dev/format-and-test.sh` and pass all the checks, including
+    - Linter / Formatter: `ruff` (covers style, import ordering, docstrings, and formatting)
+    - Type Checker: `mypy` (strict mode)
+    - Test Runner: `pytest` with `pytest-cov` and `pytest-mock`
 
 ### Frontend (TypeScript / React)
 - Language: TypeScript (strict)
 - UI Framework: React
 - Build Tool: Vite
-- Test Runner: Vitest
 - Linter: ESLint
+- Acceptance criterion: run `bash dev/ui-test.sh` and pass all the checks, including
+    - Test Runner: Vitest
 
 ## Naming
 
