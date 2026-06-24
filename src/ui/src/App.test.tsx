@@ -8,10 +8,6 @@ import type { UseConfigReturn } from "./test-helpers/mocks";
  * Test Specification: App.test.tsx
  *
  * Source: src/ui/src/App.tsx
- * Status: scaffolded — production component not yet implemented
- *
- * Missing production surface: App component export from ./App
- * Missing production surface: useConfig hook export from ./hooks/useConfig
  *
  * The tests mock useConfig and verify prop-passing to child components.
  * Child components are mocked to expose received props via test attributes.
@@ -75,9 +71,7 @@ vi.mock("./components/TargetLabels", () => ({
   ),
 }));
 
-// Placeholder: will import from "./App" once available
-// import App from "./App";
-const App = () => null as unknown as JSX.Element;
+import App from "./App";
 
 beforeEach(() => {
   mockUseConfigReturn = buildUseConfigReturn();

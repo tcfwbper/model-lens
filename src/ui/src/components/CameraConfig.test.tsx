@@ -7,20 +7,9 @@ import type { CameraConfigData } from "../test-helpers/fixtures";
  * Test Specification: CameraConfig.test.tsx
  *
  * Source: src/ui/src/components/CameraConfig.tsx
- * Status: scaffolded — production component not yet implemented
- *
- * Missing production surface: CameraConfig component export from ./CameraConfig
  */
 
-// Placeholder: will import from "./CameraConfig" once available
-// import { CameraConfig } from "./CameraConfig";
-
-interface CameraConfigProps {
-  camera: CameraConfigData | null;
-  onUpdate: (camera: CameraConfigData) => Promise<void>;
-}
-
-const CameraConfig = (_props: CameraConfigProps) => null as unknown as JSX.Element;
+import { CameraConfig } from "./CameraConfig";
 
 describe("CameraConfig", () => {
   describe("Happy Path — Rendering", () => {

@@ -9,26 +9,9 @@ import {
  * Test Specification: useConfig.test.ts
  *
  * Source: src/ui/src/hooks/useConfig.ts
- * Status: scaffolded — production hook not yet implemented
- *
- * Missing production surface: useConfig hook export from ./useConfig
  */
 
-// Placeholder: will import from "./useConfig" once available
-// import { useConfig } from "./useConfig";
-const useConfig = (): {
-  runtimeConfig: unknown;
-  validLabels: string[];
-  loading: boolean;
-  updateCamera: (camera: unknown) => Promise<void>;
-  updateLabels: (labels: string[]) => Promise<void>;
-} => ({
-  runtimeConfig: null,
-  validLabels: [],
-  loading: false,
-  updateCamera: async () => {},
-  updateLabels: async () => {},
-});
+import { useConfig } from "./useConfig";
 
 // --- Test Helpers ---
 

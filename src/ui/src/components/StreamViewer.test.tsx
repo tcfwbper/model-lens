@@ -12,10 +12,6 @@ import type { MockCanvas2DContext } from "../test-helpers/mocks";
  * Test Specification: StreamViewer.test.tsx
  *
  * Source: src/ui/src/components/StreamViewer.tsx
- * Status: scaffolded — production component not yet implemented
- *
- * Missing production surface: StreamViewer component export from ./StreamViewer
- * Missing production surface: useStream hook export from ../hooks/useStream
  */
 
 // Mock the useStream hook
@@ -28,14 +24,7 @@ vi.mock("../hooks/useStream", () => ({
 }));
 let mockUseStreamReturnCalledWith: boolean | undefined;
 
-// Placeholder: will import from "./StreamViewer" once available
-// import { StreamViewer } from "./StreamViewer";
-interface StreamViewerProps {
-  sseActive: boolean;
-  onToggleSSE: (active: boolean) => void;
-  confidenceThreshold: number | null;
-}
-const StreamViewer = (_props: StreamViewerProps) => null as unknown as JSX.Element;
+import { StreamViewer } from "./StreamViewer";
 
 let mockCtx: MockCanvas2DContext;
 let mockImageInstances: Array<{

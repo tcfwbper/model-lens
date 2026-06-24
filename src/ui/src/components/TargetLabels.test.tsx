@@ -5,19 +5,10 @@ import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
  * Test Specification: TargetLabels.test.tsx
  *
  * Source: src/ui/src/components/TargetLabels.tsx
- * Status: scaffolded — production component not yet implemented
- *
- * Missing production surface: TargetLabels component export from ./TargetLabels
  */
 
-// Placeholder: will import from "./TargetLabels" once available
-// import { TargetLabels } from "./TargetLabels";
-interface TargetLabelsProps {
-  validLabels: string[];
-  activeLabels: string[];
-  onUpdate: (labels: string[]) => Promise<void>;
-}
-const TargetLabels = (_props: TargetLabelsProps) => null as unknown as JSX.Element;
+import { TargetLabels } from "./TargetLabels";
+import type { TargetLabelsProps } from "./TargetLabels";
 
 // --- Helpers ---
 

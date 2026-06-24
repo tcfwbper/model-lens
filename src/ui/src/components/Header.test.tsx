@@ -1,24 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-// TODO: Import Header from "./Header" once production file exists
-// import { Header } from "./Header";
-
-/**
- * Test Specification: Header.test.tsx
- *
- * Source: src/ui/src/components/Header.tsx
- * Status: scaffolded — production component not yet implemented
- *
- * Missing production surface: Header component export from ./Header
- */
-
-// Placeholder to allow the module to parse without production import
-const Header = () => null as unknown as JSX.Element;
+import { Header } from "./Header";
 
 describe("Header", () => {
   describe("Happy Path — Rendering", () => {
     it("renders_header_element", () => {
-      // Skip: Header component not yet implemented
       // Setup: Render <Header />
       // Expected: A <header> element is present in the document
       const { container } = render(<Header />);

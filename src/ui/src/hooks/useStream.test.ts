@@ -7,14 +7,9 @@ import type { MockEventSource } from "../test-helpers/mocks";
  * Test Specification: useStream.test.ts
  *
  * Source: src/ui/src/hooks/useStream.ts
- * Status: scaffolded — production hook not yet implemented
- *
- * Missing production surface: useStream hook export from ./useStream
  */
 
-// Placeholder: will import from "./useStream" once available
-// import { useStream } from "./useStream";
-const useStream = (_active: boolean): { frame: unknown } => ({ frame: null });
+import { useStream } from "./useStream";
 
 let mockEventSourceClass: ReturnType<typeof createMockEventSourceClass>;
 let instances: MockEventSource[];
