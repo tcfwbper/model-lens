@@ -1,4 +1,4 @@
-# Copyright 2025 ModelLens Contributors
+# Copyright 2026 ModelLens Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,45 +11,77 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Request schemas for model_lens API."""
+
+"""Pydantic v2 request models for API routers.
+
+Defines all request body models used for HTTP request validation. These models
+are the single source of truth for request body structure and constraints.
+"""
+
+from __future__ import annotations
 
 from typing import Annotated, Literal
 
-import pydantic
+from pydantic import BaseModel, Field, field_validator
 
 
-class LocalCameraRequest(pydantic.BaseModel):
-    """Request body for selecting a local camera source."""
+class LocalCameraRequest(BaseModel):
+    """Request to select a local camera source.
+
+    Attributes:
+        source_type: Literal discriminator value ``"local"``.
+        device_index: Zero-based index of the local camera device.
+    """
 
     source_type: Literal["local"]
-    device_index: Annotated[int, pydantic.Field(ge=0)] = 0
+    device_index: int = Field(default=0, ge=0)
 
 
-class RtspCameraRequest(pydantic.BaseModel):
-    """Request body for selecting an RTSP camera source."""
+class RtspCameraRequest(BaseModel):
+    """Request to select an RTSP camera source.
+
+    Attributes:
+        source_type: Literal discriminator value ``"rtsp"``.
+        rtsp_url: URL of the RTSP stream. Must start with ``rtsp://``.
+    """
 
     source_type: Literal["rtsp"]
     rtsp_url: str
 
-    @pydantic.field_validator("rtsp_url")
+    @field_validator("rtsp_url")
     @classmethod
-    def validate_rtsp_url(cls, v: str) -> str:
-        """Validate that the RTSP URL uses the rtsp:// scheme."""
+    def _validate_rtsp_url(cls, v: str) -> str:
+        """Validate that rtsp_url starts with 'rtsp://'.
+
+        Args:
+            v: The URL value to validate.
+
+        Returns:
+            The validated URL.
+
+        Raises:
+            ValueError: If the URL does not start with ``rtsp://``.
+        """
         if not v.startswith("rtsp://"):
             raise ValueError("rtsp_url must start with 'rtsp://'")
         return v
 
 
-class UpdateCameraRequest(pydantic.BaseModel):
-    """Request body for updating the camera source."""
+class UpdateCameraRequest(BaseModel):
+    """Wraps a polymorphic camera request body.
 
-    camera: Annotated[
-        LocalCameraRequest | RtspCameraRequest,
-        pydantic.Field(discriminator="source_type"),
-    ]
+    Attributes:
+        camera: Discriminated union of camera request types.
+    """
+
+    camera: Annotated[LocalCameraRequest | RtspCameraRequest, Field(discriminator="source_type")]
 
 
-class UpdateLabelsRequest(pydantic.BaseModel):
-    """Request body for updating the target label filter."""
+class UpdateLabelsRequest(BaseModel):
+    """Request to replace the target label filter.
+
+    Attributes:
+        target_labels: List of label strings. May be empty.
+    """
 
     target_labels: list[str]

@@ -1,277 +1,154 @@
-# CameraCapture Specification for ModelLens
+# CameraCapture
+
+## Overview
+
+Abstracts over local (webcam) and RTSP camera sources, vending `Frame` objects on demand via a blocking `read()` call. Contains the `CameraCapture` abstract base class, a shared `_retry_read` helper function, and two concrete subclasses (`LocalCamera`, `RtspCamera`). Does not perform frame annotation, inference, or colour space conversion.
+
+## Boundaries
+
+- Owns: opening, reading from, retrying, and releasing `cv2.VideoCapture` handles.
+- Owns: constructing `Frame` objects from successful reads (including buffer copy and timestamping).
+- Owns: retry logic with exponential backoff and jitter on frame read failures.
+- Owns: input validation of `rtsp_url` prefix (`RtspCamera` only).
+- Delegates: frame annotation and inference to `InferenceEngine`.
+- Delegates: colour space conversion (BGR → RGB) to `InferenceEngine`.
+- Delegates: lifecycle management (when to create/destroy instances) to Detection Pipeline.
+- Must not: perform frame annotation, inference, or format conversion.
+- Must not: manage `RuntimeConfig` or react to label/threshold changes.
+- Must not: support `rtsps://` (TLS-secured RTSP).
+- Must not: support multi-consumer fan-out.
+
+## Dependencies
+
+| Collaborator | Role | Allowed Interaction | Forbidden Interaction |
+|---|---|---|---|
+| `cv2.VideoCapture` | Camera backend | `__init__(source)`, `.isOpened()`, `.read()`, `.release()` | — |
+| `model_lens.entities.Frame` | Output entity | Construct via `Frame(data=..., timestamp=..., source=...)` | Must not modify `data` after construction |
+| `model_lens.entities.LocalCameraConfig` | Input config | Read `device_index` field | — |
+| `model_lens.entities.RtspCameraConfig` | Input config | Read `rtsp_url` field | — |
+| `model_lens.exceptions.DeviceNotFoundError` | Error signaling | Raised when device/URL unreachable at construction | — |
+| `model_lens.exceptions.OperationError` | Error signaling | Raised when all retry attempts exhausted in `read()` | — |
+| `model_lens.exceptions.ValidationError` | Error signaling | Raised when `rtsp_url` has invalid prefix (`RtspCamera`) | — |
+| `threading.Lock` | Concurrency | Per-instance lock for thread safety | — |
+| `time.time` | Timestamping | Capture POSIX timestamp after successful read | — |
+| `time.sleep` | Retry timing | Wait between retry attempts | — |
+| `random.uniform` | Jitter | Add uniform jitter `[0.0, 1.0)` to retry waits | — |
+
+Construction constraint: concrete subclasses are constructed directly via their `__init__`. `CameraCapture` is abstract and must never be instantiated directly.
+
+## Behavior
+
+### Abstract Base Class: `CameraCapture`
+
+1. Declares `read()` and `close()` as abstract methods.
+2. Implements `__enter__` returning `self` and `__exit__` calling `self.close()`.
+3. Subclasses must not override `__enter__` or `__exit__`.
+
+### Module-Level Helper: `_retry_read`
+
+4. Accepts an open `cv2.VideoCapture` handle, a `reopen_fn` callable, a `source` string, and a `threading.Lock`.
+5. Attempts to read a frame up to 3 times total (initial attempt + 2 retries).
+6. For each attempt:
+   - Acquires `lock`, calls `cap.read()`, releases `lock`.
+   - On success (`success=True` and `raw is not None`): captures `time.time()` as timestamp, copies the raw buffer via `.copy()`, returns a `Frame`.
+   - On failure: acquires `lock`, calls `cap.release()`, releases `lock`.
+7. After a failed attempt, waits `base_wait + random.uniform(0.0, 1.0)` seconds before proceeding.
+8. Wait schedule: attempt 1 fails → wait 1s + jitter; attempt 2 fails → wait 2s + jitter; attempt 3 fails → wait 4s + jitter then raise.
+9. Between waits (except after the final attempt), acquires `lock`, calls `reopen_fn()` to get a fresh handle, releases `lock`.
+10. If all 3 attempts are exhausted, raises `OperationError`.
+
+### Concrete Subclass: `LocalCamera`
+
+11. Constructor accepts `LocalCameraConfig`, sets `source` to `f"local:{config.device_index}"`.
+12. Opens `cv2.VideoCapture(config.device_index)` immediately.
+13. Raises `DeviceNotFoundError` if `cap.isOpened()` returns `False` — no retry at construction.
+14. Initialises `threading.Lock` and `_is_closed = False`.
+15. `read()` delegates to `_retry_read` passing the current handle, `self._reopen`, source, and lock.
+16. `_reopen()` creates a fresh `cv2.VideoCapture(device_index)`, stores it on `self._cap`, returns it.
+17. `close()` acquires lock; if not already closed, releases the handle if open, marks `_is_closed = True`.
+
+### Concrete Subclass: `RtspCamera`
+
+18. Constructor accepts `RtspCameraConfig`.
+19. Validates `rtsp_url` starts with `"rtsp://"` — raises `ValidationError` if not.
+20. Sets `source` to the full RTSP URL string.
+21. Opens `cv2.VideoCapture(config.rtsp_url)` immediately.
+22. Raises `DeviceNotFoundError` if `cap.isOpened()` returns `False` — no retry at construction.
+23. Initialises `threading.Lock` and `_is_closed = False`.
+24. `read()` delegates to `_retry_read` identically to `LocalCamera`.
+25. `_reopen()` creates a fresh `cv2.VideoCapture(rtsp_url)`, stores it on `self._cap`, returns it.
+26. `close()` is identical in logic to `LocalCamera.close()`.
+
+## Inputs
+
+### `LocalCamera.__init__`
+
+| Field | Type | Constraints | Required? |
+|---|---|---|---|
+| `config` | `LocalCameraConfig` | Valid `LocalCameraConfig` instance | Yes |
+
+### `RtspCamera.__init__`
+
+| Field | Type | Constraints | Required? |
+|---|---|---|---|
+| `config` | `RtspCameraConfig` | Valid `RtspCameraConfig` instance; `rtsp_url` must start with `rtsp://` | Yes |
+
+### `_retry_read`
+
+| Field | Type | Constraints | Required? |
+|---|---|---|---|
+| `open_cap` | `cv2.VideoCapture` | Already-opened handle | Yes |
+| `reopen_fn` | `Callable[[], cv2.VideoCapture]` | Returns a fresh opened handle | Yes |
+| `source` | `str` | Human-readable source identifier | Yes |
+| `lock` | `threading.Lock` | Per-instance lock | Yes |
 
-## Core Principle
+## Outputs
 
-`CameraCapture` is the abstract boundary between the Detection Pipeline and the underlying camera
-hardware or network stream. It owns an open connection to a camera source, vends `Frame` objects
-on demand via a blocking `read()` call, and is recreated by the Detection Pipeline whenever the
-camera configuration changes. Both source types use OpenCV (`cv2.VideoCapture`) as the unified
-capture backend (ADR-0007).
+### `read()` / `_retry_read`
 
----
-
-## Class Hierarchy
-
-```
-CameraCapture     ← abstract base class
-├── LocalCamera   ← source_type = "local"  (cv2.VideoCapture with device index)
-└── RtspCamera    ← source_type = "rtsp"   (cv2.VideoCapture with RTSP URL)
-```
-
-Future source types are added as additional subclasses. The abstract base class defines the full
-public contract; concrete subclasses implement it independently.
-
----
-
-## Abstract Base Class: `CameraCapture`
-
-### Responsibility
-
-- Define the public interface that all camera backends must satisfy.
-- Declare `read()` as the sole public frame-acquisition method.
-- Declare `close()` as the public resource-release method.
-- Support context manager protocol (`__enter__` / `__exit__`) for deterministic lifecycle management.
-
-### Constructor
-
-`CameraCapture` is abstract and must never be instantiated directly. It defines no constructor
-signature; each concrete subclass defines its own.
-
-### Abstract Method: `read()`
-
-```python
-@abstractmethod
-def read(self) -> Frame:
-    ...
-```
-
-#### Behaviour
-
-- Blocking call: does not return until a valid frame is available or all retries are exhausted.
-- On success, returns a `Frame` constructed from a **copy** of the numpy array returned by
-  `cv2.VideoCapture.read()`.
-- Thread-safe: a per-instance lock is acquired at entry and released before returning (including
-  on all exception paths).
-
-#### Return Value
-
-A `Frame` with:
-
-| Field | Value |
-|---|---|
-| `data` | `numpy.ndarray`, shape `(H, W, 3)`, dtype `uint8`, colour space BGR; always a `.copy()` of the OpenCV buffer |
-| `timestamp` | POSIX timestamp (float, seconds since 1970-01-01T00:00:00 UTC) with sub-second precision, captured immediately after a successful `cv2.VideoCapture.read()` |
-| `source` | Human-readable source identifier set at construction time (see per-subclass rules below) |
-
-#### Raises
-
-| Exception | Condition |
-|---|---|
-| `OperationError` | All retry attempts are exhausted without obtaining a valid frame |
-
-#### Retry Strategy (shared by both subclasses)
-
-When `cv2.VideoCapture.read()` returns `(False, None)` or an otherwise invalid frame:
-
-1. The existing `cv2.VideoCapture` handle is released.
-2. A new `cv2.VideoCapture` handle is opened with the same source (device index or RTSP URL).
-3. `read()` is retried on the new handle.
-4. If the new handle also fails, the sequence repeats up to **3 attempts total** (the initial
-   failure plus two retries — wait intervals: 1 s, 2 s, 4 s before each successive attempt).
-5. Each wait interval has **uniform jitter** added: `wait = base_seconds + random.uniform(0.0, 1.0)`.
-6. If all 3 attempts are exhausted, `OperationError` is raised.
-
-| Attempt | Base wait before this attempt |
-|---|---|
-| 1 (initial) | 0 s (no wait) |
-| 2 (retry 1) | 1 s + jitter |
-| 3 (retry 2) | 2 s + jitter |
-| — (give up) | 4 s + jitter elapsed, then raise `OperationError` |
-
-### Abstract Method: `close()`
-
-```python
-@abstractmethod
-def close(self) -> None:
-    ...
-```
-
-Releases the underlying `cv2.VideoCapture` handle and any other resources held by the instance.
-Thread-safe: protected by the same per-instance lock as `read()`.
-Calling `close()` more than once must be safe (idempotent).
-
-### Context Manager Protocol
-
-```python
-def __enter__(self) -> "CameraCapture":
-    return self
-
-def __exit__(
-    self,
-    exc_type: type[BaseException] | None,
-    exc_val: BaseException | None,
-    exc_tb: TracebackType | None,
-) -> None:
-    self.close()
-```
-
-Both methods are implemented on the abstract base class and delegate to `close()`. Subclasses
-must not override `__enter__` or `__exit__`.
-
-### Lock and `close()` Interaction
-
-The per-instance lock covers both `read()` and `close()`. If `close()` is called while `read()`
-holds the lock (e.g., during a retry sleep), `close()` will block until `read()` releases the
-lock. The retry loop inside `read()` checks for no cancellation signal; callers that need prompt
-shutdown should arrange for the Detection Pipeline to stop calling `read()` before calling
-`close()`.
-
----
-
-## Concrete Subclass: `LocalCamera`
-
-### Responsibility
-
-Open a local webcam by device index using `cv2.VideoCapture(device_index)` and vend frames.
-
-### Constructor
-
-```python
-def __init__(self, config: LocalCameraConfig) -> None:
-    ...
-```
-
-#### Behaviour
-
-1. Sets `source` to `f"local:{config.device_index}"`.
-2. Opens `cv2.VideoCapture(config.device_index)` immediately.
-3. If the handle is not opened successfully (`cap.isOpened()` returns `False`), raises
-   `DeviceNotFoundError` immediately — **no retry at construction time**.
-4. Initialises the per-instance `threading.Lock`.
-
-#### Raises
-
-| Exception | Condition |
-|---|---|
-| `DeviceNotFoundError` | `cv2.VideoCapture` cannot open the device index on the first attempt |
-
-### `read()` Implementation Notes
-
-- Acquires the per-instance lock.
-- Calls `cap.read()` on the existing handle.
-- On failure, applies the shared retry strategy (re-opens handle, waits with jitter).
-- On success, copies the frame buffer, constructs and returns a `Frame`.
-- Releases the lock before returning or raising.
-
-### `close()` Implementation Notes
-
-- Acquires the per-instance lock.
-- Calls `cap.release()` on the handle if it is open.
-- Marks the handle as released to ensure idempotency.
-- Releases the lock.
-
----
-
-## Concrete Subclass: `RtspCamera`
-
-### Responsibility
-
-Open an RTSP stream by URL using `cv2.VideoCapture(rtsp_url)` and vend frames, with reconnect
-logic for network interruptions.
-
-### Constructor
-
-```python
-def __init__(self, config: RtspCameraConfig) -> None:
-    ...
-```
-
-#### Input Validation
-
-`rtsp_url` must be a non-empty string beginning with `rtsp://`. The remainder may be:
-- A domain name (e.g., `rtsp://example.com/stream`)
-- An IP address with port (e.g., `rtsp://192.168.1.10:554/stream`)
-- An IP address with port and route (e.g., `rtsp://192.168.1.10:554/live/channel1`)
-
-`rtsps://` (TLS) is **not** supported in this version and must be rejected with
-`ValidationError` if supplied.
-
-#### Behaviour
-
-1. Validates `rtsp_url` format; raises `ValidationError` if invalid.
-2. Sets `source` to the full RTSP URL string.
-3. Opens `cv2.VideoCapture(config.rtsp_url)` immediately.
-4. If the handle is not opened successfully (`cap.isOpened()` returns `False`), raises
-   `DeviceNotFoundError` immediately — **no retry at construction time**.
-5. Initialises the per-instance `threading.Lock`.
-
-#### Raises
-
-| Exception | Condition |
-|---|---|
-| `ValidationError` | `rtsp_url` does not start with `rtsp://` |
-| `DeviceNotFoundError` | `cv2.VideoCapture` cannot open the RTSP URL on the first attempt |
-
-### `read()` Implementation Notes
-
-- Identical retry strategy to `LocalCamera` (shared base behaviour).
-- On network interruption (`cap.read()` returns `(False, None)`), re-opens the handle with the
-  same RTSP URL and retries.
-- Acquires and releases the per-instance lock identically to `LocalCamera`.
-
-### `close()` Implementation Notes
-
-- Identical to `LocalCamera.close()`.
-
----
-
-## Lifecycle
-
-```
-Detection Pipeline
-    │
-    ▼
-LocalCamera.__init__(config) / RtspCamera.__init__(config)
-    ├── validate input (RtspCamera only)
-    ├── set source string
-    ├── open cv2.VideoCapture handle  → DeviceNotFoundError if fails immediately
-    └── initialise threading.Lock
-    │
-    ▼
-with camera:                          ← __enter__ returns self
-    │
-    ├── loop:
-    │     frame = camera.read()       ← blocking; retries up to 3 attempts on failure
-    │     pass frame to InferenceEngine
-    │
-    ▼
-__exit__ → close()                    ← releases cv2.VideoCapture handle
-```
-
-When the Detection Pipeline receives a camera config change:
-1. The existing `CameraCapture` instance is closed (via `close()` or context manager exit).
-2. A new `CameraCapture` subclass instance is constructed from the new `CameraConfig`.
-
----
-
-## Error Handling Summary
-
-| Situation | Exception | Raised by |
+| Field | Type | Description |
 |---|---|---|
-| `rtsp_url` does not start with `rtsp://` | `ValidationError` | `RtspCamera.__init__()` |
-| Device index unreachable at startup | `DeviceNotFoundError` | `LocalCamera.__init__()` |
-| RTSP URL unreachable at startup | `DeviceNotFoundError` | `RtspCamera.__init__()` |
-| All retry attempts exhausted during `read()` | `OperationError` | `read()` (both subclasses) |
+| return | `Frame` | Frame with `.data` (copied BGR `ndarray`), `.timestamp` (POSIX float), `.source` (string) |
 
-All exceptions are subtypes of `ModelLensError` as defined in `spec/errors.md`.
+### Exceptions
 
----
+| Exception | Condition | Raised by |
+|---|---|---|
+| `ValidationError` | `rtsp_url` does not start with `rtsp://` | `RtspCamera.__init__()` |
+| `DeviceNotFoundError` | Device/URL unreachable at construction | `LocalCamera.__init__()`, `RtspCamera.__init__()` |
+| `OperationError` | All 3 retry attempts exhausted during `read()` | `_retry_read()` |
 
-## Constraints and Non-Goals
+## Invariants
 
-- `CameraCapture` does **not** perform any frame annotation, inference, or format conversion.
-  BGR colour space is preserved as-is; RGB conversion is the responsibility of `InferenceEngine`.
-- `CameraCapture` does **not** manage `RuntimeConfig` or react to label changes.
-- `rtsps://` (TLS-secured RTSP) is out of scope for this version.
-- A single `CameraCapture` instance is used by a single Detection Pipeline; no multi-consumer
-  fan-out is provided at this layer.
+- `CameraCapture` is never instantiated directly.
+- `Frame.data` is always a `.copy()` of the OpenCV buffer — never a view.
+- `Frame.timestamp` is captured immediately after a successful `cap.read()`, not before.
+- `Frame.data` colour space is always BGR.
+- `close()` is idempotent — multiple calls are safe.
+- The per-instance lock protects individual `cap.read()`, `cap.release()`, and `reopen_fn()` calls — not the entire retry loop duration.
+- Retry waits (`time.sleep`) occur outside the lock so `close()` from another thread is not blocked during sleep intervals (though `close()` will still block if the lock is held for a `cap` operation).
+- Module-level constants: `_MAX_ATTEMPTS = 3`, `_RETRY_BASE_WAITS = (1.0, 2.0, 4.0)`.
+
+## Edge Cases
+
+- Condition: `cv2.VideoCapture.read()` returns `(False, None)` on all 3 attempts.
+  Expected: `OperationError` raised after exhausting retries (including final 4s + jitter wait).
+
+- Condition: `close()` called while `_retry_read` is sleeping between attempts.
+  Expected: `close()` does not block during the sleep; it blocks only if the lock is held for a brief `cap` operation. The retry loop continues after waking and may attempt to use a released handle — the next `cap.read()` will simply fail and count as a failed attempt.
+
+- Condition: `close()` called multiple times.
+  Expected: Second and subsequent calls are no-ops (idempotent via `_is_closed` flag).
+
+- Condition: `RtspCamera` constructed with `rtsps://` URL.
+  Expected: `ValidationError` raised.
+
+- Condition: `RtspCamera` constructed with `rtsp://` URL that is unreachable.
+  Expected: `DeviceNotFoundError` raised (no retry at construction).
+
+## Related
+
+- [Frame](./entities/frame.md): output entity constructed by `_retry_read`.
+- [CameraConfig](./entities/camera_config.md): input configuration entities.
+- [exceptions](./exceptions.md): `DeviceNotFoundError`, `OperationError`, `ValidationError`.
+- [ARCHITECTURE.md](../ARCHITECTURE.md): CameraCapture component role.

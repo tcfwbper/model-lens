@@ -1,4 +1,4 @@
-# Copyright 2025 ModelLens Contributors
+# Copyright 2026 ModelLens Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,12 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Camera capture abstractions for ModelLens.
 
-Defines the :class:`CameraCapture` abstract base class and its two concrete
-subclasses :class:`LocalCamera` and :class:`RtspCamera`, which wrap
-``cv2.VideoCapture`` and vend :class:`~model_lens.entities.Frame` objects to
-the Detection Pipeline.
+"""Camera capture abstraction — local and RTSP camera sources.
+
+Provides the ``CameraCapture`` abstract base class, ``LocalCamera`` and
+``RtspCamera`` concrete subclasses, and the ``_retry_read`` helper function.
 """
 
 from __future__ import annotations
@@ -27,7 +26,6 @@ import random
 import threading
 import time
 from collections.abc import Callable
-from types import TracebackType
 from typing import cast
 
 import cv2
@@ -39,67 +37,8 @@ from model_lens.exceptions import DeviceNotFoundError, OperationError, Validatio
 
 logger = logging.getLogger(__name__)
 
-# Retry schedule: base wait in seconds before attempt 2, 3, and give-up.
-_RETRY_BASE_WAITS: tuple[float, float, float] = (1.0, 2.0, 4.0)
 _MAX_ATTEMPTS: int = 3
-
-
-class CameraCapture(abc.ABC):
-    """Abstract base class for all camera capture backends.
-
-    Defines the public contract for acquiring :class:`~model_lens.entities.Frame`
-    objects from a camera source. Concrete subclasses implement :meth:`read` and
-    :meth:`close` for their respective source types.
-
-    Supports the context manager protocol; :meth:`__exit__` always calls
-    :meth:`close`.
-    """
-
-    @abc.abstractmethod
-    def read(self) -> Frame:
-        """Acquire and return the next frame from the camera source.
-
-        Blocking call. Retries up to :data:`_MAX_ATTEMPTS` times on failure,
-        re-opening the underlying capture handle between attempts.
-
-        Returns:
-            A :class:`~model_lens.entities.Frame` containing a copy of the
-            captured BGR image, a POSIX timestamp, and the source identifier.
-
-        Raises:
-            OperationError: If all retry attempts are exhausted without
-                obtaining a valid frame.
-        """
-
-    @abc.abstractmethod
-    def close(self) -> None:
-        """Release the underlying capture handle and any held resources.
-
-        Idempotent: calling this method more than once is safe.
-        """
-
-    def __enter__(self) -> CameraCapture:
-        """Enter the context manager, returning ``self``.
-
-        Returns:
-            This :class:`CameraCapture` instance.
-        """
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Exit the context manager, calling :meth:`close`.
-
-        Args:
-            exc_type: The exception type, if any.
-            exc_val: The exception value, if any.
-            exc_tb: The exception traceback, if any.
-        """
-        self.close()
+_RETRY_BASE_WAITS: tuple[float, ...] = (1.0, 2.0, 4.0)
 
 
 def _retry_read(
@@ -108,196 +47,254 @@ def _retry_read(
     source: str,
     lock: threading.Lock,
 ) -> Frame:
-    """Shared retry logic for both :class:`LocalCamera` and :class:`RtspCamera`.
+    """Attempt to read a frame with exponential backoff and jitter.
 
-    Attempts to read a frame up to :data:`_MAX_ATTEMPTS` times. On each failure
-    the existing handle is released, a new one is opened via ``reopen_fn``, and
-    the process waits ``base + jitter`` seconds before the next attempt.
+    Tries up to ``_MAX_ATTEMPTS`` times. On each failure, releases the current
+    handle, sleeps with exponential backoff plus jitter, then reopens.
 
     Args:
-        open_cap: The already-opened ``cv2.VideoCapture`` handle to use for the
-            first attempt.
-        reopen_fn: A zero-argument callable that opens and returns a fresh
-            ``cv2.VideoCapture`` handle.
-        source: The human-readable source identifier stored on the returned
-            :class:`~model_lens.entities.Frame`.
-        lock: The per-instance lock, passed by the caller.
+        open_cap: An already-opened cv2.VideoCapture handle.
+        reopen_fn: Callable returning a fresh opened VideoCapture handle.
+        source: Human-readable source identifier for the Frame.
+        lock: Per-instance threading lock for thread safety.
 
     Returns:
-        A :class:`~model_lens.entities.Frame` on success.
+        A Frame containing the captured image data, timestamp, and source.
 
     Raises:
-        OperationError: If all :data:`_MAX_ATTEMPTS` attempts fail.
+        OperationError: If all retry attempts are exhausted.
     """
     cap = open_cap
+
     for attempt in range(_MAX_ATTEMPTS):
-        with lock:
+        # Read under lock
+        lock.acquire()
+        try:
             success, raw = cap.read()
+        finally:
+            lock.release()
+
         if success and raw is not None:
+            # Capture timestamp after successful read
             timestamp = time.time()
-            data: NDArray[np.uint8] = cast(NDArray[np.uint8], raw.copy())
+            data = cast(NDArray[np.uint8], raw.copy())
             return Frame(data=data, timestamp=timestamp, source=source)
 
-        # This attempt failed — release the handle.
-        with lock:
+        # Failed read: release cap under lock
+        lock.acquire()
+        try:
             cap.release()
-        logger.warning("Frame read failed on attempt %d for source %r", attempt + 1, source)
+        finally:
+            lock.release()
 
-        # Determine the wait duration (base + jitter).
-        base_wait = _RETRY_BASE_WAITS[attempt]
+        # Sleep outside lock (exponential backoff + jitter)
         jitter = random.uniform(0.0, 1.0)
-        wait = base_wait + jitter
-        logger.debug("Waiting %.3f s before retry (base=%.1f, jitter=%.3f)", wait, base_wait, jitter)
+        wait = _RETRY_BASE_WAITS[attempt] + jitter
         time.sleep(wait)
 
-        if attempt + 1 < _MAX_ATTEMPTS:
-            # Open a fresh handle for the next attempt.
-            with lock:
+        # Reopen (except after the final attempt)
+        if attempt < _MAX_ATTEMPTS - 1:
+            lock.acquire()
+            try:
                 cap = reopen_fn()
+            finally:
+                lock.release()
 
-    logger.error("All %d read attempts exhausted for source %r", _MAX_ATTEMPTS, source)
-    raise OperationError(f"Failed to read a frame from {source!r} after {_MAX_ATTEMPTS} attempts")
+    raise OperationError(f"All {_MAX_ATTEMPTS} read attempts exhausted for source '{source}'")
+
+
+class CameraCapture(abc.ABC):
+    """Abstract base class for camera sources.
+
+    Subclasses must implement ``read()`` and ``close()``. Context manager
+    support (``__enter__``/``__exit__``) is provided by this base class.
+    """
+
+    @abc.abstractmethod
+    def read(self) -> Frame:
+        """Read a single frame from the camera source.
+
+        Returns:
+            A Frame containing the captured image data.
+
+        Raises:
+            OperationError: If reading fails after retries.
+        """
+
+    @abc.abstractmethod
+    def close(self) -> None:
+        """Release the underlying camera handle.
+
+        Must be idempotent — multiple calls are safe.
+        """
+
+    def __enter__(self) -> CameraCapture:
+        """Enter the context manager.
+
+        Returns:
+            Self.
+        """
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Exit the context manager, calling close()."""
+        self.close()
 
 
 class LocalCamera(CameraCapture):
-    """Camera capture backend for a locally attached camera device.
+    """Concrete camera capture for a locally attached camera device.
 
-    Opens ``cv2.VideoCapture(device_index)`` immediately on construction.
+    Opens a cv2.VideoCapture at construction with the given device index.
+    Thread-safe read access is provided via a per-instance lock.
 
     Args:
-        config: A :class:`~model_lens.entities.LocalCameraConfig` specifying the
-            device index.
+        config: A LocalCameraConfig specifying the device index.
 
     Raises:
-        DeviceNotFoundError: If the device cannot be opened on the first attempt.
+        DeviceNotFoundError: If the device cannot be opened.
     """
 
     def __init__(self, config: LocalCameraConfig) -> None:
-        """Initialise the local camera capture.
+        """Initialize LocalCamera with the given configuration.
 
         Args:
-            config: The local camera configuration.
+            config: A LocalCameraConfig specifying the device index.
 
         Raises:
-            DeviceNotFoundError: If ``cv2.VideoCapture`` cannot open the device.
+            DeviceNotFoundError: If the device cannot be opened.
         """
-        self._device_index: int = config.device_index
-        self.source: str = f"local:{config.device_index}"
-        self._lock: threading.Lock = threading.Lock()
-        self._is_closed: bool = False
-        self._cap: cv2.VideoCapture = cv2.VideoCapture(config.device_index)
-        if not self._cap.isOpened():
-            raise DeviceNotFoundError(f"LocalCamera: cannot open device index {config.device_index!r}")
-        logger.info("LocalCamera opened device index %d", config.device_index)
+        self._device_index = config.device_index
+        self._source = f"local:{config.device_index}"
+        self._lock = threading.Lock()
+        self._is_closed = False
 
-    def _reopen(self) -> cv2.VideoCapture:
-        """Open a fresh ``cv2.VideoCapture`` handle for the configured device index.
+        self._cap = cv2.VideoCapture(config.device_index)
+        if not self._cap.isOpened():
+            raise DeviceNotFoundError(f"Local camera device {config.device_index} not found")
+
+        logger.info("LocalCamera opened device %d", config.device_index)
+
+    @property
+    def source(self) -> str:
+        """Human-readable source identifier.
 
         Returns:
-            A new ``cv2.VideoCapture`` instance.
+            Source string in the format 'local:{device_index}'.
+        """
+        return self._source
+
+    def read(self) -> Frame:
+        """Read a single frame from the local camera.
+
+        Returns:
+            A Frame with copied data, POSIX timestamp, and source string.
+
+        Raises:
+            OperationError: If all retry attempts are exhausted.
+        """
+        return _retry_read(self._cap, self._reopen, self._source, self._lock)
+
+    def _reopen(self) -> cv2.VideoCapture:
+        """Create a fresh VideoCapture handle for the device.
+
+        Returns:
+            A new cv2.VideoCapture opened with the device index.
         """
         self._cap = cv2.VideoCapture(self._device_index)
         return self._cap
 
-    def read(self) -> Frame:
-        """Acquire and return the next frame from the local camera.
+    def close(self) -> None:
+        """Release the underlying cv2 handle.
+
+        Idempotent — multiple calls are safe.
+        """
+        self._lock.acquire()
+        try:
+            if not self._is_closed:
+                self._cap.release()
+                self._is_closed = True
+                logger.info("LocalCamera closed device %d", self._device_index)
+        finally:
+            self._lock.release()
+
+
+class RtspCamera(CameraCapture):
+    """Concrete camera capture for an RTSP network camera stream.
+
+    Opens a cv2.VideoCapture at construction with the given RTSP URL.
+    Thread-safe read access is provided via a per-instance lock.
+
+    Args:
+        config: An RtspCameraConfig specifying the RTSP URL.
+
+    Raises:
+        ValidationError: If the URL does not start with 'rtsp://'.
+        DeviceNotFoundError: If the stream cannot be opened.
+    """
+
+    def __init__(self, config: RtspCameraConfig) -> None:
+        """Initialize RtspCamera with the given configuration.
+
+        Args:
+            config: An RtspCameraConfig specifying the RTSP URL.
+
+        Raises:
+            ValidationError: If the URL does not start with 'rtsp://'.
+            DeviceNotFoundError: If the stream cannot be opened.
+        """
+        if not config.rtsp_url.startswith("rtsp://"):
+            raise ValidationError(f"rtsp_url must start with 'rtsp://', got '{config.rtsp_url}'")
+
+        self._rtsp_url = config.rtsp_url
+        self._source = config.rtsp_url
+        self._lock = threading.Lock()
+        self._is_closed = False
+
+        self._cap = cv2.VideoCapture(config.rtsp_url)
+        if not self._cap.isOpened():
+            raise DeviceNotFoundError(f"RTSP stream unreachable: {config.rtsp_url}")
+
+        logger.info("RtspCamera opened stream %s", config.rtsp_url)
+
+    @property
+    def source(self) -> str:
+        """Human-readable source identifier.
 
         Returns:
-            A :class:`~model_lens.entities.Frame` with BGR image data, timestamp,
-            and source identifier.
+            The full RTSP URL string.
+        """
+        return self._source
+
+    def read(self) -> Frame:
+        """Read a single frame from the RTSP stream.
+
+        Returns:
+            A Frame with copied data, POSIX timestamp, and source string.
 
         Raises:
             OperationError: If all retry attempts are exhausted.
         """
-        return _retry_read(
-            open_cap=self._cap,
-            reopen_fn=self._reopen,
-            source=self.source,
-            lock=self._lock,
-        )
-
-    def close(self) -> None:
-        """Release the ``cv2.VideoCapture`` handle.
-
-        Idempotent: safe to call multiple times.
-        """
-        with self._lock:
-            if not getattr(self, "_is_closed", False):
-                if hasattr(self, "_cap") and self._cap.isOpened():
-                    self._cap.release()
-                    logger.info("LocalCamera released device index %d", self._device_index)
-                self._is_closed = True
-
-
-class RtspCamera(CameraCapture):
-    """Camera capture backend for an RTSP network camera stream.
-
-    Opens ``cv2.VideoCapture(rtsp_url)`` immediately on construction.
-
-    Args:
-        config: A :class:`~model_lens.entities.RtspCameraConfig` specifying the
-            RTSP URL.
-
-    Raises:
-        ValidationError: If ``rtsp_url`` does not start with ``rtsp://``.
-        DeviceNotFoundError: If the RTSP stream cannot be opened on the first attempt.
-    """
-
-    def __init__(self, config: RtspCameraConfig) -> None:
-        """Initialise the RTSP camera capture.
-
-        Args:
-            config: The RTSP camera configuration.
-
-        Raises:
-            ValidationError: If ``rtsp_url`` does not start with ``rtsp://``.
-            DeviceNotFoundError: If ``cv2.VideoCapture`` cannot open the RTSP URL.
-        """
-        if not config.rtsp_url.startswith("rtsp://"):
-            raise ValidationError(f"RtspCamera: rtsp_url must start with 'rtsp://', got {config.rtsp_url!r}")
-        self._rtsp_url: str = config.rtsp_url
-        self.source: str = config.rtsp_url
-        self._lock: threading.Lock = threading.Lock()
-        self._is_closed: bool = False
-        self._cap: cv2.VideoCapture = cv2.VideoCapture(config.rtsp_url)
-        if not self._cap.isOpened():
-            raise DeviceNotFoundError(f"RtspCamera: cannot open RTSP URL {config.rtsp_url!r}")
-        logger.info("RtspCamera opened URL %r", config.rtsp_url)
+        return _retry_read(self._cap, self._reopen, self._source, self._lock)
 
     def _reopen(self) -> cv2.VideoCapture:
-        """Open a fresh ``cv2.VideoCapture`` handle for the configured RTSP URL.
+        """Create a fresh VideoCapture handle for the RTSP stream.
 
         Returns:
-            A new ``cv2.VideoCapture`` instance.
+            A new cv2.VideoCapture opened with the RTSP URL.
         """
         self._cap = cv2.VideoCapture(self._rtsp_url)
         return self._cap
 
-    def read(self) -> Frame:
-        """Acquire and return the next frame from the RTSP stream.
-
-        Returns:
-            A :class:`~model_lens.entities.Frame` with BGR image data, timestamp,
-            and source identifier.
-
-        Raises:
-            OperationError: If all retry attempts are exhausted.
-        """
-        return _retry_read(
-            open_cap=self._cap,
-            reopen_fn=self._reopen,
-            source=self.source,
-            lock=self._lock,
-        )
-
     def close(self) -> None:
-        """Release the ``cv2.VideoCapture`` handle.
+        """Release the underlying cv2 handle.
 
-        Idempotent: safe to call multiple times.
+        Idempotent — multiple calls are safe.
         """
-        with self._lock:
-            if not getattr(self, "_is_closed", False):
-                if hasattr(self, "_cap") and self._cap.isOpened():
-                    self._cap.release()
-                    logger.info("RtspCamera released URL %r", self._rtsp_url)
+        self._lock.acquire()
+        try:
+            if not self._is_closed:
+                self._cap.release()
                 self._is_closed = True
+                logger.info("RtspCamera closed stream %s", self._rtsp_url)
+        finally:
+            self._lock.release()

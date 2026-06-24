@@ -1,290 +1,187 @@
-# InferenceEngine Specification for ModelLens
+# InferenceEngine
 
-## Core Principle
+## Overview
 
-`InferenceEngine` is the abstract boundary between the Detection Pipeline and the underlying model
-backend. It loads a model file and its label map once at startup, exposes a single `detect()` method
-that accepts a raw BGR frame and returns a filtered, fully-resolved list of `DetectionResult` objects,
-and is designed so that adding a new backend in the future requires only adding a new subclass —
-no changes to the pipeline or any other component.
+Abstracts over model inference backends. Contains the `InferenceEngine` abstract base class, the `YOLOInferenceEngine` concrete subclass (MVP backend using Ultralytics YOLO), and the module-level `ENGINE_REGISTRY`. Loads a model and its label map once at construction, then produces filtered `DetectionResult` lists for each frame. Does not perform frame annotation, camera lifecycle management, or rendering.
 
----
+## Boundaries
 
-## Class Hierarchy
+- Owns: model loading, label map population, inference execution, confidence filtering, `is_target` computation, bounding box normalisation, and result ordering.
+- Owns: thread-safe access to the model via a per-instance lock.
+- Owns: teardown (releasing model resources) and post-teardown guard.
+- Delegates: frame acquisition to `CameraCapture`.
+- Delegates: frame annotation and rendering to Detection Pipeline / Stream API.
+- Delegates: camera lifecycle management to Detection Pipeline.
+- Must not: mutate the input `frame` array or the `target_labels` list.
+- Must not: accept runtime changes to `model` or `confidence_threshold`.
+- Must not: perform frame annotation or rendering.
+- Must not: manage camera lifecycle or frame acquisition.
+- Must not: support dynamic plugin loading in `ENGINE_REGISTRY`.
 
-```
-InferenceEngine          ← abstract base class
-└── YOLOInferenceEngine  ← concrete MVP implementation (Ultralytics YOLO)
-```
+## Dependencies
 
-Future backends (e.g., ONNX, TFLite) are added as additional subclasses. The abstract base class
-defines the full public contract; concrete subclasses implement it independently.
-
----
-
-## Abstract Base Class: `InferenceEngine`
-
-### Responsibility
-
-- Define the public interface that all backends must satisfy.
-- Own the label map: populated at construction time via the `_get_label_map()` hook implemented by
-  each subclass, and exposed as an internal lookup table `_label_map`.
-- Declare `detect()` as the sole public inference method.
-- Declare `teardown()` as the public resource-release method.
-- Declare `get_label_map()` as the public accessor for the label map.
-
-### Abstract Method: `_get_label_map()`
-
-```python
-@abstractmethod
-def _get_label_map(self) -> dict[int, str]:
-    ...
-```
-
-Called once during `__init__` to populate `_label_map`. Each subclass implements this to retrieve
-the label map from its specific model backend.
-
-### Abstract Method: `get_label_map()`
-
-```python
-@abstractmethod
-def get_label_map(self) -> dict[int, str]:
-    ...
-```
-
-Public accessor that returns a copy of the current label map. Raises `OperationError` if called
-after `teardown()`.
-
-### Abstract Method: `detect()`
-
-```python
-@abstractmethod
-def detect(
-    self,
-    frame: numpy.ndarray,
-    target_labels: list[str],
-) -> list[DetectionResult]:
-    ...
-```
-
-#### Parameters
-
-| Parameter | Type | Description |
-|---|---|---|
-| `frame` | `numpy.ndarray` | BGR image, shape `(H, W, 3)`, dtype `uint8` |
-| `target_labels` | `list[str]` | Current target label strings from `RuntimeConfig`; passed per call so the engine always uses the latest value without requiring a state update |
-
-#### Return Value
-
-A `list[DetectionResult]`, possibly empty, containing only detections whose `confidence` is greater
-than or equal to `confidence_threshold`. The list is ordered by descending confidence. Each
-`DetectionResult` has:
-
-- `label` — resolved human-readable string from the label map (never a raw integer index).
-- `confidence` — float in `(0.0, 1.0]`.
-- `bounding_box` — normalised `(x1, y1, x2, y2)` floats in `[0.0, 1.0]`, top-left origin.
-- `is_target` — `True` if `label` is in `target_labels`.
-
-#### Raises
-
-| Exception | Condition |
-|---|---|
-| `OperationError` | The inference call fails unexpectedly at runtime |
-
-#### Rules
-
-- `detect()` must **not** mutate `frame` or any element of `target_labels`.
-- `detect()` is **thread-safe**; concurrent callers are serialised internally via a per-instance
-  lock acquired at the start of each call and released before returning.
-- Sub-threshold detections (those with `confidence` strictly less than `confidence_threshold`) are
-  filtered out inside `detect()` before the result list is constructed; they are never returned to
-  the caller. Detections with `confidence` exactly equal to `confidence_threshold` are **kept**.
-- `is_target` is computed inside `detect()` by checking `label in target_labels`.
-- BGR→RGB conversion, if required by the backend, is performed inside the concrete subclass
-  implementation and must not modify the input `frame` array.
-
-### Abstract Method: `teardown()`
-
-```python
-@abstractmethod
-def teardown(self) -> None:
-    ...
-```
-
-Releases all resources held by the engine instance. After `teardown()` returns, the engine is
-considered inert: any subsequent call to `detect()` must raise `OperationError`.
-
-#### Rules
-
-- `teardown()` is **idempotent**: calling it more than once must not raise and must not cause
-  undefined behaviour (the second and subsequent calls silently do nothing).
-- `teardown()` is **thread-safe**; it acquires the same per-instance lock used by `detect()` before
-  clearing any internal state, ensuring no concurrent `detect()` call observes a partially torn-down
-  state.
-- `detect()` must raise `OperationError` (not expose an `AttributeError` or other language-level
-  error) if called after `teardown()` has completed.
-
----
-
-### `ENGINE_REGISTRY`
-
-A module-level dict mapping backend name strings to `InferenceEngine` subclasses. Defined in the
-same module as the abstract base class. Engines must be imported explicitly at startup; no dynamic
-loading is performed.
-
-```python
-ENGINE_REGISTRY: dict[str, type[InferenceEngine]] = {
-    "yolo": YOLOInferenceEngine,
-}
-```
-
-This registry is the designated extension point for future backends. Adding a new backend requires:
-1. Implementing a new `InferenceEngine` subclass.
-2. Adding one entry to `ENGINE_REGISTRY`.
-3. No changes to the Detection Pipeline or any other component.
-
----
-
-## Concrete Subclass: `YOLOInferenceEngine`
-
-### Responsibility
-
-Load an Ultralytics YOLO model and run inference using it. This is the sole MVP backend.
-
-### Constructor
-
-```python
-def __init__(
-    self,
-    model: str,
-    confidence_threshold: float,
-) -> None:
-    ...
-```
-
-`YOLOInferenceEngine` defines its own constructor independently; the abstract base class imposes
-no constructor signature.
-
-#### Parameters
-
-| Parameter | Type | Source | Description |
+| Collaborator | Role | Allowed Interaction | Forbidden Interaction |
 |---|---|---|---|
-| `model` | `str` | `AppConfig.model.model_name` | Model name or path passed to `YOLO()` (e.g. `"yolov8n.pt"`) |
-| `confidence_threshold` | `float` | `AppConfig.model.confidence_threshold` | Minimum confidence (inclusive) for a detection to be included in results |
+| `ultralytics.YOLO` | Model backend | `YOLO(model)`, `model(frame)`, `.names` | — |
+| `model_lens.entities.DetectionResult` | Output entity | Construct via `DetectionResult(label=..., confidence=..., bounding_box=..., is_target=...)` | — |
+| `model_lens.exceptions.ConfigurationError` | Error signaling | Raised when `confidence_threshold` is invalid | — |
+| `model_lens.exceptions.OperationError` | Error signaling | Raised on model load failure, inference failure, or post-teardown access | — |
+| `model_lens.exceptions.ParseError` | Error signaling | Abstract contract: may be raised by `detect()` if label map index lookup fails | — |
+| `threading.Lock` | Concurrency | Per-instance lock serialising `detect()`, `get_label_map()`, and `teardown()` | — |
+| `numpy` | Array type | `NDArray[np.uint8]` for frame input | Must not mutate the input array |
 
-#### Initialisation Order
+Construction constraint: `InferenceEngine` is abstract. `YOLOInferenceEngine` is constructed directly via `__init__(model, confidence_threshold)`. The abstract base class defines `__init__` which calls `self._get_label_map()` to populate `self._label_map`.
 
-1. Validate `confidence_threshold`.
-2. Initialise `_lock` and `_torn_down`.
-3. Load the YOLO model via `_load_model(model)` → stored in `_model`.
-4. Call `super().__init__()` which invokes `_get_label_map()` to populate `_label_map` from
-   `self._model.names`.
+## Behavior
 
-#### Raises
+### Abstract Base Class: `InferenceEngine`
 
-| Exception | Condition |
-|---|---|
-| `ConfigurationError` | `confidence_threshold` does not satisfy `0.0 < value <= 1.0` |
-| `OperationError` | The YOLO model fails to load (e.g., invalid name, file not found, incompatible format) |
+1. `__init__` is abstract; its body calls `self._get_label_map()` and stores the result in `self._label_map`.
+2. Declares `_get_label_map()` as abstract — subclasses return their backend-specific label map.
+3. Declares `get_label_map()` as abstract — public accessor returning a copy of the label map.
+4. Declares `detect(frame, target_labels)` as abstract — runs inference and returns filtered results.
+5. Declares `teardown()` as abstract — releases all resources.
 
-### Label Map
+### Concrete Subclass: `YOLOInferenceEngine`
 
-The label map is populated from the loaded YOLO model's `names` attribute (`self._model.names`),
-which maps integer class indices to human-readable label strings. No separate label file is used.
+#### Construction (Initialisation Order)
 
-### `get_label_map()` Implementation Notes
+6. Validates `confidence_threshold` satisfies `0.0 < value <= 1.0`; raises `ConfigurationError` if not.
+7. Stores `_confidence_threshold`.
+8. Initialises `_lock` (`threading.Lock`) and `_torn_down = False`.
+9. Loads the YOLO model via `_load_model(model)` — a static method that calls `YOLO(model)` and returns the result; raises `OperationError` if loading fails.
+10. Stores loaded model in `_model`.
+11. Calls `super().__init__()` which invokes `_get_label_map()` to populate `_label_map` from `self._model.names`.
 
-- Acquires the per-instance lock before reading `_label_map`.
-- Raises `OperationError` if called after `teardown()`.
-- Returns a copy of `_label_map` so callers cannot mutate internal state.
+#### `_get_label_map()`
 
-### `detect()` Implementation Notes
+12. Raises `OperationError` if `self._model` is `None`.
+13. Returns `self._model.names` (a `dict[int, str]`).
 
-- The method acquires the per-instance lock at entry and releases it before returning (including
-  on exception paths), ensuring thread safety.
-- At the start of each call (inside the lock), the method must check whether `teardown()` has
-  already been called; if so, it must raise `OperationError` immediately.
-- Also raises `OperationError` if `_model` is `None`.
-- If the model requires RGB input, the subclass must convert the BGR `frame` to RGB internally
-  using a copy; the original `frame` array must not be modified.
-- Raw integer output indices from the model are translated to label strings via `_label_map`.
-- Detections with `confidence` strictly less than `confidence_threshold` are discarded before
-  constructing `DetectionResult` objects. Detections with `confidence` exactly equal to
-  `confidence_threshold` are **kept**.
-- `is_target` is set by evaluating `label in target_labels` for each surviving detection.
-- The returned list is ordered by descending `confidence`.
+#### `get_label_map()`
 
-### `teardown()` Implementation Notes
+14. Acquires per-instance lock.
+15. Raises `OperationError` if `_torn_down` is `True`.
+16. Returns `self._label_map.copy()`.
 
-- The method acquires the per-instance lock before clearing any state, so it cannot interleave
-  with an in-progress `detect()` call.
-- Inside the lock, the method checks whether the engine is already torn down (idempotency guard);
-  if so it returns immediately without logging or mutating state.
-- On the first call, the method sets `_torn_down = True` and releases the reference to the loaded
-  model (sets `_model` to `None`) so the garbage collector can reclaim GPU/CPU memory.
-- `_label_map` is **not** cleared by `teardown()`.
-- A log message at `INFO` level is emitted after the resources are released.
+#### `detect(frame, target_labels)`
 
----
+17. Acquires per-instance lock (held for the entire method body).
+18. Raises `OperationError` if `_torn_down` is `True`.
+19. Raises `OperationError` if `_model` is `None`.
+20. Calls `self._model(frame)` to run inference; wraps any exception in `OperationError`.
+21. Iterates over boxes in the first result (`raw_results[0].boxes`).
+22. For each detection box:
+    - Resolves label from `self._label_map[int(boxes.cls[i].item())]`.
+    - Extracts confidence as `float(boxes.conf[i].item())`.
+    - Computes normalised bounding box: divides pixel coordinates by frame dimensions `(w, h)`.
+    - Skips (does not include) detections with `confidence < self._confidence_threshold`.
+    - Constructs `DetectionResult` with `is_target = (label in target_labels)`.
+23. Sorts results by descending `confidence`.
+24. Returns the sorted list (may be empty).
 
-## Lifecycle
+#### `teardown()`
 
-```
-Server startup
-    │
-    ▼
-YOLOInferenceEngine.__init__()
-    ├── validate confidence_threshold  (raises ConfigurationError if invalid)
-    ├── initialise per-instance threading.Lock and _torn_down flag
-    ├── load YOLO model via YOLO(model)  (raises OperationError if load fails)
-    └── populate _label_map from model.names
-    │
-    ▼
-Detection Pipeline loop (may be called from multiple threads)
-    │
-    ├── frame = CameraCapture.read()
-    ├── results = engine.detect(frame.data, runtime_config.target_labels)
-    │       └── acquires lock → checks _torn_down → runs inference → releases lock
-    └── publish (frame, results) → SSE queue
-    │
-    ▼
-Server shutdown
-    │
-    └── engine.teardown()
-            └── acquires lock → sets _torn_down → sets _model = None → releases lock
-```
+25. Acquires per-instance lock.
+26. If `_torn_down` is already `True`, returns immediately (idempotent).
+27. Sets `_torn_down = True`.
+28. Sets `_model = None` (releases model for garbage collection).
+29. Does NOT clear `_label_map`.
+30. Releases lock, then logs at `INFO` level.
 
-The engine instance is created once at startup and reused for the lifetime of the server process.
-It is never recreated in response to runtime config changes (model and confidence threshold
-are fixed at startup per `spec/configuration.md`).
+### Module-Level: `ENGINE_REGISTRY`
 
----
+31. A `dict[str, type[InferenceEngine]]` mapping backend name strings to subclasses.
+32. Contains `{"yolo": YOLOInferenceEngine}` at module definition time.
+33. No dynamic loading — all backends are imported explicitly at startup.
 
-## Error Handling Summary
+## Inputs
 
-| Situation | Exception | Raised by |
+### `YOLOInferenceEngine.__init__`
+
+| Field | Type | Constraints | Required? |
+|---|---|---|---|
+| `model` | `str` | Model name or path passed to `YOLO()` (e.g. `"yolov8n.pt"`) | Yes |
+| `confidence_threshold` | `float` | `0.0 < value <= 1.0` | Yes |
+
+### `detect()`
+
+| Field | Type | Constraints | Required? |
+|---|---|---|---|
+| `frame` | `NDArray[np.uint8]` | BGR image, shape `(H, W, 3)`, dtype `uint8` | Yes |
+| `target_labels` | `list[str]` | Current target label strings | Yes |
+
+## Outputs
+
+### `detect()`
+
+| Field | Type | Description |
 |---|---|---|
-| Invalid `confidence_threshold` value | `ConfigurationError` | `YOLOInferenceEngine.__init__()` |
-| YOLO model fails to load | `OperationError` | `YOLOInferenceEngine.__init__()` |
-| PyTorch inference call fails at runtime | `OperationError` | `YOLOInferenceEngine.detect()` |
-| `detect()` called when `_model` is `None` | `OperationError` | `YOLOInferenceEngine.detect()` |
-| `detect()` called after `teardown()` | `OperationError` | `YOLOInferenceEngine.detect()` |
-| `get_label_map()` called after `teardown()` | `OperationError` | `YOLOInferenceEngine.get_label_map()` |
+| return | `list[DetectionResult]` | Filtered, sorted (descending confidence) list; may be empty |
 
-All exceptions are subtypes of `ModelLensError` as defined in `spec/errors.md`.
+### `get_label_map()`
 
----
+| Field | Type | Description |
+|---|---|---|
+| return | `dict[int, str]` | Copy of label map (class index → label string) |
 
-## Constraints and Non-Goals
+### Exceptions
 
-- The engine is **thread-safe** via a per-instance lock; concurrent calls to `detect()` are
-  serialised automatically.
-- The engine does **not** accept runtime changes to `model` or `confidence_threshold`. These are
-  fixed at startup.
-- The engine does **not** perform any frame annotation or rendering. Annotated output is the
-  responsibility of the Detection Pipeline / Stream API.
-- The engine does **not** manage camera lifecycle or frame acquisition.
-- `ENGINE_REGISTRY` does not support dynamic plugin loading; all backends must be imported at
-  startup.
-- After `teardown()` is called, the engine cannot be re-used; there is no `reinitialise()` or
-  equivalent. A new instance must be constructed if inference is needed again.
+| Exception | Condition | Raised by |
+|---|---|---|
+| `ConfigurationError` | `confidence_threshold` not in `(0.0, 1.0]` | `YOLOInferenceEngine.__init__()` |
+| `OperationError` | YOLO model fails to load | `YOLOInferenceEngine.__init__()` (via `_load_model`) |
+| `OperationError` | Inference call fails at runtime | `YOLOInferenceEngine.detect()` |
+| `OperationError` | `_model` is `None` when `detect()` called | `YOLOInferenceEngine.detect()` |
+| `OperationError` | `detect()` called after `teardown()` | `YOLOInferenceEngine.detect()` |
+| `OperationError` | `get_label_map()` called after `teardown()` | `YOLOInferenceEngine.get_label_map()` |
+| `ParseError` | Label map index lookup fails (model output references an index absent from the label map) | `InferenceEngine.detect()` (abstract contract — future backends may raise; current YOLO backend does not) |
+
+## Invariants
+
+- `InferenceEngine` is never instantiated directly.
+- `confidence_threshold` is immutable after construction.
+- `model` is immutable after construction (no hot-swap).
+- `detect()` never mutates `frame` or `target_labels`.
+- `detect()` and `teardown()` and `get_label_map()` are thread-safe via the same per-instance lock.
+- After `teardown()`, any call to `detect()` or `get_label_map()` raises `OperationError` — never exposes `AttributeError` or other language-level errors.
+- `teardown()` is idempotent — second and subsequent calls are silent no-ops.
+- `_label_map` is NOT cleared by `teardown()`.
+- `is_target` is computed inside `detect()` by `label in target_labels` — not delegated to the caller.
+- Sub-threshold detections (confidence strictly less than threshold) are filtered out inside `detect()` before constructing `DetectionResult` objects. Detections with confidence exactly equal to threshold are kept.
+- The returned list is ordered by descending confidence.
+- `ENGINE_REGISTRY` does not support dynamic plugin loading.
+
+## Edge Cases
+
+- Condition: `confidence_threshold` is `0.0`.
+  Expected: `ConfigurationError` raised (range is exclusive of zero).
+
+- Condition: `confidence_threshold` is `1.0`.
+  Expected: Valid construction (range is inclusive of 1.0).
+
+- Condition: Model produces no detections (no boxes).
+  Expected: Returns empty list `[]`.
+
+- Condition: All detections are below `confidence_threshold`.
+  Expected: Returns empty list `[]`.
+
+- Condition: `detect()` called after `teardown()`.
+  Expected: `OperationError` raised immediately (before any inference attempt).
+
+- Condition: `teardown()` called multiple times.
+  Expected: Second and subsequent calls are silent no-ops; no log emitted, no exception raised.
+
+- Condition: `detect()` called concurrently from multiple threads.
+  Expected: Serialised by lock — only one inference runs at a time.
+
+- Condition: `boxes` is falsy (e.g. empty or `None`-like) in raw results.
+  Expected: Returns empty list (the `if boxes:` guard skips iteration).
+
+## Related
+
+- [DetectionResult](./entities/detection_result.md): output entity constructed by `detect()`.
+- [Frame](./entities/frame.md): input `frame.data` passed to `detect()`.
+- [RuntimeConfig](./entities/runtime_config.md): provides `target_labels` passed per call.
+- [exceptions](./exceptions.md): `ConfigurationError`, `OperationError`, `ParseError`.
+- [ARCHITECTURE.md](../ARCHITECTURE.md): InferenceEngine component role.

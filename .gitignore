@@ -50,3 +50,4 @@ build/
 # UI
 node_modules
 .vite
+.spectra

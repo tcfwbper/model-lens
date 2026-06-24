@@ -1,6 +1,11 @@
+/**
+ * Camera configuration form component.
+ * Allows the user to switch between local and RTSP camera sources
+ * and submit updates via the onUpdate callback.
+ */
 import { useState, useEffect } from "react";
 
-type CameraConfigData =
+export type CameraConfigData =
   | { source_type: "local"; device_index: number }
   | { source_type: "rtsp"; rtsp_url: string };
 
@@ -9,18 +14,19 @@ interface CameraConfigProps {
   onUpdate: (camera: CameraConfigData) => Promise<void>;
 }
 
-export default function CameraConfig({ camera, onUpdate }: CameraConfigProps) {
+export function CameraConfig({ camera, onUpdate }: CameraConfigProps): JSX.Element {
   const [selectedType, setSelectedType] = useState<"local" | "rtsp">(
-    camera?.source_type ?? "local",
+    camera?.source_type ?? "local"
   );
-  const [deviceIndex, setDeviceIndex] = useState(
-    camera?.source_type === "local" ? String(camera.device_index) : "",
+  const [deviceIndex, setDeviceIndex] = useState<string>(
+    camera?.source_type === "local" ? String(camera.device_index) : ""
   );
-  const [rtspUrl, setRtspUrl] = useState(
-    camera?.source_type === "rtsp" ? camera.rtsp_url : "",
+  const [rtspUrl, setRtspUrl] = useState<string>(
+    camera?.source_type === "rtsp" ? camera.rtsp_url : ""
   );
   const [updating, setUpdating] = useState(false);
 
+  // Sync from props
   useEffect(() => {
     if (camera) {
       setSelectedType(camera.source_type);
@@ -36,15 +42,13 @@ export default function CameraConfig({ camera, onUpdate }: CameraConfigProps) {
 
   function isDirty(): boolean {
     if (camera === null) {
-      return (
-        (selectedType === "local" && deviceIndex !== "") ||
-        (selectedType === "rtsp" && rtspUrl !== "")
-      );
+      if (selectedType === "local" && deviceIndex !== "") return true;
+      if (selectedType === "rtsp" && rtspUrl !== "") return true;
+      return false;
     }
     if (selectedType !== camera.source_type) return true;
     if (selectedType === "local" && camera.source_type === "local") {
-      const parsed = parseInt(deviceIndex, 10);
-      return isNaN(parsed) ? deviceIndex !== "" : parsed !== camera.device_index;
+      return parseInt(deviceIndex, 10) !== camera.device_index || (deviceIndex !== "" && isNaN(parseInt(deviceIndex, 10)));
     }
     if (selectedType === "rtsp" && camera.source_type === "rtsp") {
       return rtspUrl !== camera.rtsp_url;
@@ -52,26 +56,17 @@ export default function CameraConfig({ camera, onUpdate }: CameraConfigProps) {
     return false;
   }
 
-  function handleTypeChange(value: string) {
-    const newType = value as "local" | "rtsp";
-    setSelectedType(newType);
-    if (newType === "local") {
-      setRtspUrl("");
-      setDeviceIndex("");
-    } else {
-      setDeviceIndex("");
-      setRtspUrl("");
-    }
+  function handleTypeChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    setSelectedType(e.target.value as "local" | "rtsp");
+    setDeviceIndex("");
+    setRtspUrl("");
   }
 
   async function handleSubmit() {
     setUpdating(true);
     try {
       if (selectedType === "local") {
-        await onUpdate({
-          source_type: "local",
-          device_index: parseInt(deviceIndex, 10),
-        });
+        await onUpdate({ source_type: "local", device_index: parseInt(deviceIndex, 10) });
       } else {
         await onUpdate({ source_type: "rtsp", rtsp_url: rtspUrl });
       }
@@ -82,7 +77,7 @@ export default function CameraConfig({ camera, onUpdate }: CameraConfigProps) {
     }
   }
 
-  const dirty = isDirty();
+  const buttonEnabled = isDirty() && !updating;
 
   return (
     <div
@@ -98,7 +93,7 @@ export default function CameraConfig({ camera, onUpdate }: CameraConfigProps) {
     >
       <select
         value={selectedType}
-        onChange={(e) => handleTypeChange(e.target.value)}
+        onChange={handleTypeChange}
         style={{
           padding: "8px 12px",
           border: "1px solid #D4DAE0",
@@ -109,47 +104,45 @@ export default function CameraConfig({ camera, onUpdate }: CameraConfigProps) {
         <option value="local">Local Camera</option>
         <option value="rtsp">RTSP</option>
       </select>
-
       {selectedType === "local" ? (
         <input
           type="number"
+          min={0}
           value={deviceIndex}
           onChange={(e) => setDeviceIndex(e.target.value)}
-          min={0}
           style={{
+            width: "120px",
             padding: "8px 12px",
             border: "1px solid #D4DAE0",
             borderRadius: "4px",
             color: "#2C3E50",
-            width: "120px",
           }}
         />
       ) : (
         <input
           type="text"
+          placeholder="rtsp://..."
           value={rtspUrl}
           onChange={(e) => setRtspUrl(e.target.value)}
-          placeholder="rtsp://..."
           style={{
+            flex: 1,
             padding: "8px 12px",
             border: "1px solid #D4DAE0",
             borderRadius: "4px",
             color: "#2C3E50",
-            flex: 1,
           }}
         />
       )}
-
       <button
-        disabled={!dirty || updating}
+        disabled={!buttonEnabled}
         onClick={handleSubmit}
         style={{
           padding: "8px 16px",
-          backgroundColor: dirty && !updating ? "#5B8CB8" : "#A8C4DC",
+          backgroundColor: buttonEnabled ? "#5B8CB8" : "#A8C4DC",
           color: "#FFFFFF",
-          border: "none",
+          borderStyle: "none",
           borderRadius: "4px",
-          cursor: dirty && !updating ? "pointer" : "default",
+          cursor: buttonEnabled ? "pointer" : "default",
         }}
       >
         {updating ? "Updating..." : "Update Camera"}

@@ -1,42 +1,83 @@
-# Stream Router Specification for ModelLens
+# Stream Router
 
-## Core Principle
+## Overview
 
-`stream.py` is the Stream API router. It pushes a continuous Server-Sent Events (SSE)
-stream of annotated frames and detection results to connected clients.
+Pushes a continuous Server-Sent Events (SSE) stream of annotated frames and detection results to connected clients. Owns the SSE event formatting, keepalive emission, idle timeout, and connection lifecycle. Does not perform inference or frame processing.
 
----
+## Boundaries
 
-## Module Location
+- Owns: SSE event generator logic (frame serialization, keepalive, idle timeout).
+- Owns: base64 encoding of JPEG bytes for the SSE payload.
+- Owns: JSON serialization of detection results into the SSE payload.
+- Owns: per-connection idle timeout (30 seconds) and keepalive emission (30-second interval).
+- Delegates: frame production and queuing to `DetectionPipeline`.
+- Delegates: pipeline access to `request.app.state.pipeline` via `cast()`.
+- Must not: perform inference, camera management, or frame annotation.
+- Must not: use `Depends(get_pipeline)` — accesses `app.state.pipeline` directly via `cast()`.
 
-`src/model_lens/routers/stream.py`
+## Dependencies
 
----
+| Collaborator | Role | Allowed Interaction | Forbidden Interaction |
+|---|---|---|---|
+| `model_lens.detection_pipeline.DetectionPipeline` | Frame source | `get_queue()` | Must not call `start()`, `stop()`, `update_config()` |
+| `queue.Queue` | Frame delivery | `.get(timeout=_QUEUE_TIMEOUT)` | — |
+| `base64` | Encoding | `b64encode(jpeg_bytes).decode()` | — |
+| `json` | Serialization | `json.dumps(payload)` | — |
+| `time.monotonic` | Timing | Read current monotonic time (aliased to `_monotonic`) | — |
+| `fastapi.APIRouter` | Router framework | Define route | — |
+| `fastapi.responses.StreamingResponse` | SSE delivery | Construct with generator and `media_type="text/event-stream"` | — |
 
-## Endpoints
+Construction constraint: module-level `router = APIRouter()` instance. Module aliases `time.monotonic` as `_monotonic` to allow test patching without affecting the global `time` module.
+
+## Behavior
+
+### Module-Level Constants
+
+1. `_IDLE_TIMEOUT = 30.0` — seconds of continuous idle before closing the connection.
+2. `_KEEPALIVE_INTERVAL = 30.0` — seconds between keepalive comments during idle.
+3. `_QUEUE_TIMEOUT = 1.0` — seconds to wait on `queue.get()` before checking idle/keepalive.
+4. `_monotonic = time.monotonic` — module-level alias for testability.
+
+### `_event_generator(pipeline) -> Generator[bytes, None, None]`
+
+5. Initializes `last_frame_time = _monotonic()` and `last_keepalive_time = last_frame_time`.
+6. Enters a `while True` loop (wrapped in `try/finally` for cleanup extensibility).
+7. Attempts `pipeline.get_queue().get(timeout=_QUEUE_TIMEOUT)`:
+   - On `queue.Empty`: sets `result = None`.
+   - On success: stores the `PipelineResult`.
+8. Reads `now = _monotonic()`.
+9. If `result` is not `None`:
+   - Updates `last_frame_time = now`.
+   - Serializes each detection in `result.detections` to a dict with keys: `label`, `confidence`, `bounding_box` (as list), `is_target`.
+   - Constructs the JSON payload: `{"jpeg_b64": base64(result.jpeg_bytes), "timestamp": result.timestamp, "source": result.source, "detections": [...]}`.
+   - Yields `f"data: {payload}\n\n".encode()`.
+10. If `result` is `None`:
+    - If `now - last_keepalive_time >= _KEEPALIVE_INTERVAL`: updates `last_keepalive_time = now`, yields `b": keepalive\n\n"`.
+    - If `now - last_frame_time >= _IDLE_TIMEOUT`: returns (closes generator, ending the SSE stream).
 
 ### `GET /stream`
 
-Pushes a continuous SSE stream of annotated frames and detection results to the client.
+11. Retrieves `DetectionPipeline` from `request.app.state.pipeline` via `cast()`.
+12. Returns `StreamingResponse(_event_generator(pipeline), media_type="text/event-stream")`.
 
-**Response content type:** `text/event-stream`
+## Inputs
 
-**SSE event format (one event per frame):**
+None (no request parameters or body).
 
-Each event is a single SSE `data:` line containing a JSON object:
+## Outputs
+
+### SSE event format (per frame)
 
 ```
-data: {"jpeg_b64":"<base64-encoded JPEG string>","timestamp":1748000400.123,"source":"local:0","detections":[{"label":"cat","confidence":0.87,"bounding_box":[0.1,0.2,0.4,0.6],"is_target":true}]}\n\n
+data: {"jpeg_b64":"<base64>","timestamp":1748000400.123,"source":"local:0","detections":[...]}\n\n
 ```
-
-JSON payload schema:
 
 | Field | Type | Description |
 |---|---|---|
 | `jpeg_b64` | `str` | Base64-encoded JPEG bytes (standard alphabet, no line breaks) |
-| `timestamp` | `float` | POSIX timestamp copied from `PipelineResult.timestamp` |
-| `source` | `str` | Camera source identifier copied from `PipelineResult.source` |
-| `detections` | `array` | Array of detection objects (see below); may be empty |
+| `timestamp` | `float` | POSIX timestamp from `PipelineResult.timestamp` |
+| `source` | `str` | Camera source identifier from `PipelineResult.source` |
+| `detections` | `array` | Array of detection objects; may be empty |
 
 Each detection object:
 
@@ -44,57 +85,43 @@ Each detection object:
 |---|---|---|
 | `label` | `str` | Human-readable label string |
 | `confidence` | `float` | Confidence score in `(0.0, 1.0]` |
-| `bounding_box` | `[x1, y1, x2, y2]` | Normalised floats in `[0.0, 1.0]`, top-left origin |
-| `is_target` | `bool` | `True` if label is in `target_labels` |
+| `bounding_box` | `[x1, y1, x2, y2]` | Normalised floats as a JSON array |
+| `is_target` | `bool` | `true` if label is in `target_labels` |
 
----
-
-## Keepalive
-
-When the queue is empty (no frame available within `1.0` second), the server sends an SSE
-comment line to keep the connection alive and prevent proxy timeouts:
+### Keepalive comment
 
 ```
 : keepalive\n\n
 ```
 
-Keepalive comments are sent at most once per second of idle time. They carry no data and
-are ignored by SSE clients.
+SSE comment line — ignored by SSE clients.
 
----
+## Invariants
 
-## Server-Side Idle Timeout (Per Connection)
+- The idle timeout is tracked per-connection. Each `GET /stream` request spawns an independent generator with its own timers.
+- Keepalive comments do NOT reset the idle timeout (`last_frame_time` is only updated on successful frame delivery).
+- The generator uses a synchronous `Generator[bytes, None, None]` — not an async generator.
+- `_monotonic` alias ensures tests can patch the time source for this module without breaking anyio/asyncio.
+- The `bounding_box` field is serialized as a Python list (converted from tuple via `list(d.bounding_box)`).
+- The queue `.get()` timeout is 1.0 second — shorter than both the keepalive interval and idle timeout.
+- The generator's `finally` block is intentionally empty (placeholder for future cleanup).
 
-The SSE idle timeout is tracked **per connection**. Each new client connection starts its
-own independent idle timer. The timer is reset to zero whenever a new `PipelineResult` is
-successfully dequeued and sent to that client.
+## Edge Cases
 
-The connection is closed by the server after **30 seconds of continuous idle time** on that
-connection (no frame dequeued and sent within 30 consecutive seconds). Keepalive comments
-sent during the idle period do **not** reset the timer. When the timeout is reached, the
-server closes the response stream cleanly (no error event). The client's built-in SSE
-reconnect behaviour will re-establish the connection, which starts a fresh idle timer.
+- Condition: No frames available for 30 consecutive seconds.
+  Expected: One keepalive comment is sent at 30 seconds, then the connection is closed (idle timeout also reached at 30 seconds — the keepalive is sent first in the same iteration, then the timeout check closes the stream).
 
----
+- Condition: Client disconnects mid-stream.
+  Expected: The generator is garbage-collected by the ASGI framework; no error logged.
 
-## Disconnect Handling
+- Condition: Queue is always empty (pipeline has no camera).
+  Expected: Keepalive sent every 30 seconds; connection closed after 30 seconds of idle.
 
-If the client disconnects before the server closes the stream, the server detects the
-disconnect via the ASGI `disconnect` signal (or `asyncio.CancelledError` on the generator)
-and exits the streaming coroutine cleanly without logging an error.
+- Condition: Frames arrive faster than the queue timeout.
+  Expected: Each frame is serialized and sent immediately; keepalive logic never triggers.
 
----
+## Related
 
-## Dependency
-
-This router accesses the `DetectionPipeline` via `Depends(get_pipeline)` (see `app.py`
-dependency injection).
-
----
-
-## Constraints
-
-- A single concurrent SSE consumer is the expected load. Multiple simultaneous `/stream`
-  connections are not explicitly prevented but are not a design target; each connection
-  consumes from the same shared queue independently (each `GET /stream` request gets its
-  own queue read loop, which means only one consumer receives any given frame).
+- [App](../app.md): mounts this router.
+- [DetectionPipeline](../detection_pipeline.md): produces `PipelineResult` objects consumed via `get_queue()`.
+- [DetectionResult](../entities/detection_result.md): fields serialized into the SSE payload.

@@ -1,0 +1,50 @@
+:root {
+  /* Colors — Background */
+  --color-bg-page: #F5F6F8;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-canvas-idle: #FFFFFF;
+
+  /* Colors — Text */
+  --color-text-primary: #2C3E50;
+  --color-text-muted: #6B7B8D;
+
+  /* Colors — Border */
+  --color-border: #D4DAE0;
+
+  /* Colors — Interactive (Primary Action) */
+  --color-primary: #5B8CB8;
+  --color-primary-disabled: #A8C4DC;
+
+  /* Colors — Interactive (Secondary / Stop Action) */
+  --color-secondary: #6B7B8D;
+  --color-secondary-disabled: #D4DAE0;
+
+  /* Colors — Constant */
+  --color-white: #FFFFFF;
+
+  /* Typography */
+  --font-family: system-ui, -apple-system, sans-serif;
+  --font-size-heading: 1.5rem;
+  --font-size-body: 1.1rem;
+  --font-size-small: 0.85rem;
+  --font-size-caption: 0.8rem;
+  --font-size-canvas-label: 14px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+
+  /* Shape */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  /* Layout */
+  --canvas-width: 800;
+  --canvas-height: 450;
+  --canvas-aspect: 16/9;
+  --dropdown-max-height: 300px;
+  --dropdown-list-max-height: 220px;
+}

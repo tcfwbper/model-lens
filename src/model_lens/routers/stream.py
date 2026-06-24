@@ -1,4 +1,4 @@
-# Copyright 2025 ModelLens Contributors
+# Copyright 2026 ModelLens Contributors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Stream router for ModelLens (SSE)."""
+
+"""Stream router — SSE stream of annotated frames and detection results.
+
+Pushes a continuous Server-Sent Events stream of annotated frames and detection
+results to connected clients. Owns the SSE event formatting, keepalive emission,
+idle timeout, and connection lifecycle.
+"""
+
+from __future__ import annotations
 
 import base64
 import json
@@ -27,25 +35,31 @@ from model_lens.detection_pipeline import DetectionPipeline
 
 router = APIRouter()
 
-_IDLE_TIMEOUT = 30.0
-_KEEPALIVE_INTERVAL = 30.0
-_QUEUE_TIMEOUT = 1.0
-# Module-level alias so tests can patch only the stream module's time source
-# without touching the global ``time`` module (which would break anyio).
+_IDLE_TIMEOUT: float = 30.0
+_KEEPALIVE_INTERVAL: float = 30.0
+_QUEUE_TIMEOUT: float = 1.0
 _monotonic = time.monotonic
 
 
 def _event_generator(pipeline: DetectionPipeline) -> Generator[bytes, None, None]:
+    """Generate SSE events from the pipeline's result queue.
+
+    Args:
+        pipeline: The detection pipeline to consume frames from.
+
+    Yields:
+        SSE-formatted bytes (data lines or keepalive comments).
+    """
     last_frame_time = _monotonic()
     last_keepalive_time = last_frame_time
 
     try:
         while True:
-            # get detection result
+            result = None
             try:
                 result = pipeline.get_queue().get(timeout=_QUEUE_TIMEOUT)
             except queue.Empty:
-                result = None
+                pass
 
             now = _monotonic()
 
@@ -60,15 +74,13 @@ def _event_generator(pipeline: DetectionPipeline) -> Generator[bytes, None, None
                     }
                     for d in result.detections
                 ]
-                payload = json.dumps(
-                    {
-                        "jpeg_b64": base64.b64encode(result.jpeg_bytes).decode(),
-                        "timestamp": result.timestamp,
-                        "source": result.source,
-                        "detections": detections,
-                    }
-                )
-                yield f"data: {payload}\n\n".encode()
+                payload = {
+                    "jpeg_b64": base64.b64encode(result.jpeg_bytes).decode(),
+                    "timestamp": result.timestamp,
+                    "source": result.source,
+                    "detections": detections,
+                }
+                yield f"data: {json.dumps(payload)}\n\n".encode()
             else:
                 if now - last_keepalive_time >= _KEEPALIVE_INTERVAL:
                     last_keepalive_time = now
@@ -76,14 +88,18 @@ def _event_generator(pipeline: DetectionPipeline) -> Generator[bytes, None, None
                 if now - last_frame_time >= _IDLE_TIMEOUT:
                     return
     finally:
-        pass  # generator teardown; extend here for resource cleanup
+        pass
 
 
 @router.get("/stream")
-async def stream(request: Request) -> StreamingResponse:  # type: ignore[type-arg]
-    """Stream detection frames as Server-Sent Events."""
+def stream(request: Request) -> StreamingResponse:  # type: ignore[type-arg]
+    """Return an SSE stream of detection results.
+
+    Args:
+        request: The incoming HTTP request.
+
+    Returns:
+        StreamingResponse with text/event-stream media type.
+    """
     pipeline = cast(DetectionPipeline, request.app.state.pipeline)
-    return StreamingResponse(
-        _event_generator(pipeline),
-        media_type="text/event-stream",
-    )
+    return StreamingResponse(_event_generator(pipeline), media_type="text/event-stream")

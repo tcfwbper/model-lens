@@ -1,3 +1,7 @@
+/**
+ * Custom React hook that encapsulates all communication with the Config API.
+ * Provides runtime configuration, valid labels, loading state, and mutation functions.
+ */
 import { useState, useEffect, useCallback } from "react";
 
 export type CameraConfigData =
@@ -10,92 +14,124 @@ export interface RuntimeConfig {
   target_labels: string[];
 }
 
+export interface UseConfigReturn {
+  runtimeConfig: RuntimeConfig | null;
+  validLabels: string[];
+  loading: boolean;
+  updateCamera: (camera: CameraConfigData) => Promise<void>;
+  updateLabels: (labels: string[]) => Promise<void>;
+}
+
 async function handleResponse(response: Response): Promise<never> {
   const message = await response.text();
-  window.alert(`Error ${response.status}: ${message}`);
-  throw new Error(`Error ${response.status}: ${message}`);
+  const errorMsg = `Error ${response.status}: ${message}`;
+  window.alert(errorMsg);
+  throw new Error(errorMsg);
 }
 
 function handleNetworkError(error: unknown): never {
   if (error instanceof TypeError) {
-    window.alert("Error 404: Server unreachable");
-    throw new Error("Error 404: Server unreachable");
+    const errorMsg = "Error 404: Server unreachable";
+    window.alert(errorMsg);
+    throw new Error(errorMsg);
   }
   throw error;
 }
 
-export function useConfig() {
+export function useConfig(): UseConfigReturn {
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig | null>(null);
   const [validLabels, setValidLabels] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const fetchConfig = fetch("/config").then(async (res) => {
-      if (!res.ok) {
-        const message = await res.text();
-        window.alert(`Error ${res.status}: ${message}`);
-        return null;
+    let mounted = true;
+
+    async function fetchConfig() {
+      try {
+        const response = await fetch("/config");
+        if (!response.ok) {
+          const message = await response.text();
+          window.alert(`Error ${response.status}: ${message}`);
+          return;
+        }
+        const data = (await response.json()) as RuntimeConfig;
+        if (mounted) {
+          setRuntimeConfig(data);
+        }
+      } catch (error) {
+        if (error instanceof TypeError) {
+          window.alert("Error 404: Server unreachable");
+        }
       }
-      return res.json() as Promise<RuntimeConfig>;
-    }).catch((err) => {
-      if (err instanceof TypeError) {
-        window.alert("Error 404: Server unreachable");
+    }
+
+    async function fetchLabels() {
+      try {
+        const response = await fetch("/config/labels");
+        if (!response.ok) {
+          const message = await response.text();
+          window.alert(`Error ${response.status}: ${message}`);
+          return;
+        }
+        const data = (await response.json()) as { valid_labels: string[] };
+        if (mounted) {
+          setValidLabels(data.valid_labels);
+        }
+      } catch (error) {
+        if (error instanceof TypeError) {
+          window.alert("Error 404: Server unreachable");
+        }
       }
-      return null;
+    }
+
+    Promise.allSettled([fetchConfig(), fetchLabels()]).then(() => {
+      if (mounted) {
+        setLoading(false);
+      }
     });
 
-    const fetchLabels = fetch("/config/labels").then(async (res) => {
-      if (!res.ok) {
-        const message = await res.text();
-        window.alert(`Error ${res.status}: ${message}`);
-        return null;
-      }
-      return res.json() as Promise<{ valid_labels: string[] }>;
-    }).catch((err) => {
-      if (err instanceof TypeError) {
-        window.alert("Error 404: Server unreachable");
-      }
-      return null;
-    });
-
-    Promise.all([fetchConfig, fetchLabels]).then(([config, labels]) => {
-      if (config) setRuntimeConfig(config);
-      if (labels) setValidLabels(labels.valid_labels);
-      setLoading(false);
-    });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const updateCamera = useCallback(async (camera: CameraConfigData) => {
+  const updateCamera = useCallback(async (camera: CameraConfigData): Promise<void> => {
     try {
-      const res = await fetch("/config/camera", {
+      const response = await fetch("/config/camera", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ camera }),
       });
-      if (!res.ok) {
-        await handleResponse(res);
+      if (!response.ok) {
+        await handleResponse(response);
       }
-      const updated = (await res.json()) as RuntimeConfig;
-      setRuntimeConfig(updated);
-    } catch (err) {
-      handleNetworkError(err);
+      const data = (await response.json()) as RuntimeConfig;
+      setRuntimeConfig(data);
+    } catch (error) {
+      if (error instanceof TypeError) {
+        handleNetworkError(error);
+      }
+      throw error;
     }
   }, []);
 
-  const updateLabels = useCallback(async (labels: string[]) => {
+  const updateLabels = useCallback(async (labels: string[]): Promise<void> => {
     try {
-      const res = await fetch("/config/labels", {
+      const response = await fetch("/config/labels", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ target_labels: labels }),
       });
-      if (!res.ok) {
-        await handleResponse(res);
+      if (!response.ok) {
+        await handleResponse(response);
       }
-      const updated = (await res.json()) as RuntimeConfig;
-      setRuntimeConfig(updated);
-    } catch (err) {
-      handleNetworkError(err);
+      const data = (await response.json()) as RuntimeConfig;
+      setRuntimeConfig(data);
+    } catch (error) {
+      if (error instanceof TypeError) {
+        handleNetworkError(error);
+      }
+      throw error;
     }
   }, []);
 

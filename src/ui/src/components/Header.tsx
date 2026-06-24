@@ -1,4 +1,7 @@
-export default function Header() {
+/**
+ * Static presentational component that renders the application title bar.
+ */
+export function Header(): JSX.Element {
   return (
     <header
       style={{
@@ -7,14 +10,7 @@ export default function Header() {
         padding: "12px 24px",
       }}
     >
-      <h1
-        style={{
-          margin: 0,
-          color: "#2C3E50",
-          fontSize: "1.5rem",
-          fontWeight: "bold",
-        }}
-      >
+      <h1 style={{ fontWeight: "bold", fontSize: "1.5rem", color: "#2C3E50", margin: "0" }}>
         ModelLens
       </h1>
     </header>

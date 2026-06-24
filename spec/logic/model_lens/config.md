@@ -1,223 +1,149 @@
-# Logic Specification: `config.py`
+# Config
 
-## Location
+## Overview
 
-`src/model_lens/config.py`
+Loads, merges, validates, and exposes the application configuration as an immutable `AppConfig` object. Configuration is resolved from three sources in priority order (lowest to highest): built-in defaults, optional TOML config file, and environment variables (`ML_*`). After `AppConfig` is constructed and validated, all values are guaranteed to satisfy their constraints. This module does not seed `RuntimeConfig` or manage any runtime state.
 
----
+## Boundaries
 
-## Purpose
+- Owns: loading configuration from CLI args, TOML file, and environment variables; merging them; validating the final result; exposing `AppConfig` and its nested frozen dataclasses.
+- Owns: type coercion of environment variable string values to the target field type.
+- Owns: filtering TOML keys to only those matching dataclass fields (unknown keys silently ignored).
+- Delegates: startup usage of `AppConfig` to the server lifespan (the caller of `load()`).
+- Delegates: runtime configuration (camera source, target labels) to the Config API and `RuntimeConfig`.
+- Must not: import or depend on FastAPI, OpenCV, or any inference library.
+- Must not: perform any I/O beyond reading the TOML file and environment variables.
+- Must not: persist configuration or manage runtime state.
 
-Loads, merges, validates, and exposes the application configuration as an immutable `AppConfig`
-object. Configuration is resolved from three sources in priority order (lowest to highest):
+## Dependencies
 
-1. Built-in defaults (hard-coded in this module).
-2. TOML config file (optional).
-3. Environment variables (`ML_*`).
+| Collaborator | Role | Allowed Interaction | Forbidden Interaction |
+|---|---|---|---|
+| `model_lens.exceptions.ConfigurationError` | Error signaling | Raised on validation failure, TOML parse error, or env var coercion failure | — |
+| `tomllib` (stdlib) | TOML parsing | `tomllib.loads()` | No third-party TOML library permitted |
+| `argparse` (stdlib) | CLI parsing | `parse_known_args()` for `--config` flag | — |
+| `os` (stdlib) | Env var access | `os.environ.get()` | — |
+| `pathlib.Path` (stdlib) | File path resolution | `Path.cwd()`, `Path.read_text()`, `Path.is_file()` | — |
+| `dataclasses.fields` (stdlib) | Schema introspection | Used to enumerate valid keys per section dataclass | — |
 
-After `AppConfig` is constructed and validated, all values are guaranteed to satisfy their
-constraints. Downstream components (`InferenceEngine`, `DetectionPipeline`, etc.) may rely on
-this guarantee without re-validating.
+Construction constraint: `AppConfig` and its nested configs are frozen dataclasses constructed via standard `**kwargs` instantiation. No factory or builder is required.
 
----
-
-## Public API
+## Behavior
 
 ### `load() -> AppConfig`
 
-The single public entry point for configuration loading.
+1. Parses `sys.argv` via `argparse` with `add_help=False` to extract the optional `--config` argument. Uses `parse_known_args()` to ignore unrecognized arguments.
+2. Resolves the config file path: if `--config` is provided, uses its value as-is; otherwise checks for `model_lens.toml` in the current working directory.
+3. If a config file path is resolved, logs at `INFO` level and reads/parses it with `tomllib.loads()`. If parsing fails, raises `ConfigurationError` wrapping the original exception.
+4. If no config file is found, logs at `WARNING` level and proceeds with built-in defaults only.
+5. Merges TOML values onto defaults per-key: for each section (`server`, `camera`, `model`), iterates the TOML section dict and copies only keys that match `dataclasses.fields()` of the corresponding dataclass. Unknown TOML keys are silently ignored.
+6. Applies environment variable overrides: for each entry in the env-var mapping, if `os.environ.get()` returns a non-`None` value, coerces it to the target type and stores it. Logs each applied override at `DEBUG` level.
+7. Constructs `ServerConfig`, `CameraConfig`, `ModelConfig` from their respective merged dicts, then constructs `AppConfig` from those three.
+8. Calls `validate(cfg)` and returns the validated `AppConfig`.
 
-**Behaviour:**
+### `validate(config: AppConfig) -> None`
 
-1. Parse the `--config` command-line argument using `argparse`.
-2. Resolve the effective config file path (see [Config File Resolution](#config-file-resolution)).
-3. Load and parse the TOML file if one is found (see [TOML Parsing](#toml-parsing)).
-4. Merge built-in defaults with TOML values (see [Merge Strategy](#merge-strategy)).
-5. Apply environment variable overrides key-by-key (see [Environment Variable Overrides](#environment-variable-overrides)).
-6. Construct `AppConfig`, call `validate()`, and return.
+1. Checks `server.host` is non-empty.
+2. Checks `server.port` is between 1 and 65535 inclusive.
+3. Checks `server.log_level` is one of `"debug"`, `"info"`, `"warning"`, `"error"`, `"critical"`.
+4. Checks `camera.source_type` is one of `"local"`, `"rtsp"`.
+5. Checks `camera.device_index` is `>= 0`.
+6. Checks `camera.rtsp_url` is non-empty when `source_type == "rtsp"`.
+7. Checks `model.model` is non-empty.
+8. Checks `model.confidence_threshold` satisfies `0.0 < value <= 1.0`.
+9. Raises `ConfigurationError` on the first violation found, with a message identifying the key, invalid value, and constraint.
 
-**Returns:** A fully validated, immutable `AppConfig` instance.
+### `ConfigLoader`
 
-**Raises:**
-- `ConfigurationError`: If any value fails validation.
-- `ConfigurationError`: If the TOML file exists but cannot be parsed.
+1. A thin class wrapper around `load()`.
+2. Provides a single `load(self) -> AppConfig` method that delegates entirely to the module-level `load()` function.
+3. Exists for dependency injection and subclassing contexts.
 
----
+## Inputs
 
-## Data Classes
+### `load()` inputs (implicit)
 
-### `ServerConfig`
+| Source | Description |
+|---|---|
+| `sys.argv` | Parsed for `--config <path>` |
+| TOML file | Optional; path from CLI or `model_lens.toml` in cwd |
+| Environment variables | `ML_<SECTION>_<KEY>` pattern |
 
-Frozen dataclass holding server-related settings.
+### Data classes
 
-| Field | Type | Default | Validation |
+#### `ServerConfig`
+
+| Field | Type | Default | Constraints |
 |---|---|---|---|
 | `host` | `str` | `"0.0.0.0"` | Non-empty string |
-| `port` | `int` | `8080` | `1 – 65535` |
+| `port` | `int` | `8080` | 1–65535 |
 | `log_level` | `str` | `"info"` | One of `"debug"`, `"info"`, `"warning"`, `"error"`, `"critical"` |
 
----
+#### `CameraConfig`
 
-### `CameraConfig`
-
-Frozen dataclass holding camera startup defaults.
-
-| Field | Type | Default | Validation |
+| Field | Type | Default | Constraints |
 |---|---|---|---|
 | `source_type` | `str` | `"local"` | One of `"local"`, `"rtsp"` |
 | `device_index` | `int` | `0` | `>= 0` |
 | `rtsp_url` | `str` | `""` | Non-empty when `source_type == "rtsp"` |
 
----
+#### `ModelConfig`
 
-### `ModelConfig`
-
-Frozen dataclass holding model-related settings.
-
-| Field | Type | Default | Validation |
+| Field | Type | Default | Constraints |
 |---|---|---|---|
 | `model` | `str` | `"yolov8n"` | Non-empty string |
 | `confidence_threshold` | `float` | `0.5` | `0.0 < value <= 1.0` |
 
----
-
-### `AppConfig`
-
-Top-level frozen dataclass. Mirrors the TOML section structure.
+#### `AppConfig`
 
 | Field | Type | Description |
 |---|---|---|
 | `server` | `ServerConfig` | Server settings |
 | `camera` | `CameraConfig` | Camera startup defaults |
-| `model` | `ModelConfig` | Model settings (fixed at startup) |
+| `model` | `ModelConfig` | Model settings |
 
-`AppConfig` is decorated with `@dataclass(frozen=True)`.
+## Outputs
 
----
-
-## Internal Functions
-
-### `validate(config: AppConfig) -> None`
-
-Validates all fields across all nested config sections. Raises `ConfigurationError` on the first
-violation found, with a message that identifies the key, the invalid value, and the constraint:
-
-```
-ConfigurationError: model.confidence_threshold must satisfy 0.0 < value <= 1.0, got 1.5
-ConfigurationError: model.model must be non-empty
-ConfigurationError: server.port must be between 1 and 65535, got 0
-ConfigurationError: camera.rtsp_url must be non-empty when source_type is "rtsp"
-```
-
-Validation rules mirror the constraints defined in `spec/configuration.md`.
-
----
-
-## Config File Resolution
-
-When `load()` is called, it parses `sys.argv` via `argparse` to look for a `--config` flag:
-
-1. If `--config` is provided, use its value strictly as the config file path.
-2. If `--config` is omitted, check for `model_lens.toml` in the **current working directory**
-   (`Path.cwd() / "model_lens.toml"`).
-3. If neither source yields a file:
-   - Log a `WARNING`: `"No config file found; using built-in defaults."`
-   - Continue with built-in defaults only.
-4. If a config file is found (from either source):
-   - Log an `INFO`: `"Loading config from {resolved_path}"`
-
----
-
-## TOML Parsing
-
-- Use `tomllib` (Python 3.11+ stdlib). No third-party TOML library is used.
-- If the file exists but cannot be parsed (invalid TOML syntax), raise:
-  ```
-  ConfigurationError: Failed to parse config file at {path}: {tomllib error message}
-  ```
-- Only keys present in the TOML file override their corresponding defaults. Missing keys retain
-  their built-in defaults.
-- Unknown TOML keys (keys not in the schema) are **silently ignored**.
-
----
-
-## Merge Strategy
-
-Merging is performed **per key**, not per section. The algorithm is:
-
-1. Start with a dict of all built-in defaults (all keys present).
-2. For each key present in the parsed TOML dict, overwrite the corresponding default value.
-3. Apply environment variable overrides (see next section).
-4. Construct the nested dataclasses (`ServerConfig`, `CameraConfig`, `ModelConfig`) from the
-   merged dict.
-5. Construct `AppConfig` from the nested dataclasses.
-
----
-
-## Environment Variable Overrides
-
-After merging defaults and TOML values, each config key is checked against its corresponding
-`ML_<SECTION>_<KEY>` environment variable. If the variable is set and non-empty, its value
-overrides the merged value.
-
-Type coercion is applied before the override is stored:
-
-| Target type | Coercion rule |
-|---|---|
-| `str` | Use the env var value as-is |
-| `int` | Parse with `int()` |
-| `float` | Parse with `float()` |
-| `bool` | `"true"` / `"1"` → `True`; `"false"` / `"0"` → `False` (case-insensitive) |
-
-If coercion fails (e.g., `ML_SERVER_PORT=abc`), raise:
-```
-ConfigurationError: Cannot coerce ML_SERVER_PORT="abc" to int
-```
-
-Full mapping of environment variables to config keys:
-
-| Environment variable | Config key |
-|---|---|
-| `ML_SERVER_HOST` | `server.host` |
-| `ML_SERVER_PORT` | `server.port` |
-| `ML_SERVER_LOG_LEVEL` | `server.log_level` |
-| `ML_CAMERA_SOURCE_TYPE` | `camera.source_type` |
-| `ML_CAMERA_DEVICE_INDEX` | `camera.device_index` |
-| `ML_CAMERA_RTSP_URL` | `camera.rtsp_url` |
-| `ML_MODEL_MODEL` | `model.model` |
-| `ML_MODEL_CONFIDENCE_THRESHOLD` | `model.confidence_threshold` |
-
----
-
-## Logging
-
-One module-level logger is used:
-
-```python
-logger = logging.getLogger(__name__)
-```
-
-| Event | Level | Message |
+| Function | Success | Failure |
 |---|---|---|
-| No config file found | `WARNING` | `"No config file found; using built-in defaults."` |
-| Config file found and loaded | `INFO` | `"Loading config from {resolved_path}"` |
-| Env var override applied | `DEBUG` | `"Env override: {env_var}={value!r} → {section}.{key}"` |
+| `load()` | Fully validated, immutable `AppConfig` | `ConfigurationError` |
+| `validate()` | `None` (returns normally) | `ConfigurationError` |
 
----
+## Invariants
 
-## Error Handling
+- All dataclasses are frozen (`@dataclass(frozen=True)`); no mutation after construction.
+- `load()` is called once at server startup; the returned `AppConfig` is shared read-only.
+- Only `ConfigurationError` is raised publicly; third-party exceptions (e.g., from `tomllib`) are caught and re-raised as `ConfigurationError`.
+- Environment variable override triggers on any non-`None` value from `os.environ.get()` — including empty strings.
+- `validate()` raises on the first constraint violation found (not all violations).
+- The valid log levels and source types are stored as module-level `frozenset` constants.
 
-All errors raised by this module are `ConfigurationError` (from `model_lens.exceptions`).
-No other exception type is raised publicly. Third-party exceptions (e.g., from `tomllib`) are
-caught at the boundary and re-raised as `ConfigurationError`.
+## Edge Cases
 
----
+- Condition: `--config` flag points to a non-existent file.
+  Expected: `ConfigurationError` raised when `read_text()` fails (wrapped in "Failed to parse config file" message).
 
-## Constraints and Assumptions
+- Condition: TOML file contains unknown keys (keys not in the dataclass fields).
+  Expected: Unknown keys are silently ignored; no error raised.
 
-- `load()` is called **once** at server startup. The returned `AppConfig` is immutable and shared
-  read-only across the application.
-- `AppConfig` does **not** seed `RuntimeConfig` directly; that responsibility belongs to the
-  server startup sequence (`app.py` lifespan).
-- This module has **no dependency** on FastAPI, OpenCV, or any inference library.
-- `tomllib` is the only stdlib module used for parsing; no third-party TOML library is permitted.
+- Condition: Environment variable set to empty string (e.g., `ML_SERVER_HOST=""`).
+  Expected: Override is applied with the empty string value. Validation may subsequently fail (e.g., `server.host must be non-empty`).
+
+- Condition: Environment variable coercion fails (e.g., `ML_SERVER_PORT=abc`).
+  Expected: `ConfigurationError` raised with message `Cannot coerce ML_SERVER_PORT="abc" to int`.
+
+- Condition: No `--config` flag and no `model_lens.toml` in current working directory.
+  Expected: Warning logged; all fields use built-in defaults; validation passes.
+
+- Condition: TOML file has valid syntax but is completely empty.
+  Expected: All fields use built-in defaults; validation passes.
+
+- Condition: `--config` is provided but value is `None`-like (argparse parses no value).
+  Expected: argparse defaults `--config` to `None`; falls through to cwd check.
+
+## Related
+
+- [Exceptions](./exceptions.md): `ConfigurationError` definition.
+- [RuntimeConfig](./entities/runtime_config.md): runtime state seeded from `AppConfig` by the server lifespan — not by this module.
+- [CONVENTIONS.md](../../CONVENTIONS.md): env var naming pattern `ML_<SECTION>_<KEY>`.
+- [ARCHITECTURE.md](../../ARCHITECTURE.md): describes `AppConfig` as startup-only, immutable configuration.
