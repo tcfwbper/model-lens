@@ -6,7 +6,7 @@ Form component that displays the current camera configuration and allows the use
 
 ## Boundaries
 
-- Owns: local form state (selected type, device index text, RTSP URL text, updating flag); dirty detection logic; form submission orchestration.
+- Owns: local form state (selected type, device index text, RTSP URL text, updating flag); dirty detection logic; form submission orchestration; form-level styling.
 - Delegates: actual API call to the parent via `onUpdate` callback.
 - Delegates: error display to the parent (errors surface via `alert()` in `useConfig`).
 - Must not: call `fetch()` directly.
@@ -17,6 +17,7 @@ Form component that displays the current camera configuration and allows the use
 | Collaborator | Role | Allowed Interaction | Forbidden Interaction |
 |---|---|---|---|
 | Parent (`App`) | Provides `camera` prop and `onUpdate` callback | Receives props; calls `onUpdate` | Must not access parent state directly |
+| Design Tokens | Visual constants | Consume via CSS custom properties | Must not hardcode values that differ from token definitions |
 
 Construction constraint: Functional React component. Uses `useState`, `useEffect` from React.
 
@@ -69,14 +70,49 @@ When the source type dropdown changes:
 4. On error: caught silently (error handled by parent via alert). Internal state is not reset.
 5. In all cases (`finally`): sets `updating` to `false`.
 
-### Rendering
+### Rendering & Styling
 
-1. A `<select>` dropdown with options "Local Camera" (value "local") and "RTSP" (value "rtsp").
-2. Conditional input:
-   - Local: `<input type="number">` bound to `deviceIndex`, min=0.
-   - RTSP: `<input type="text">` bound to `rtspUrl`, placeholder "rtsp://...".
-3. "Update Camera" button: disabled when not dirty or `updating` is true. Text changes to "Updating..." while in flight.
-4. All rendered in a single horizontal row with white background, rounded border.
+1. **Container div**:
+   - backgroundColor: `var(--color-bg-surface)` (`#FFFFFF`).
+   - border: `1px solid var(--color-border)` (`1px solid #D4DAE0`).
+   - borderRadius: `var(--radius-md)` (`8px`).
+   - padding: `var(--spacing-lg)` (`16px`).
+   - display: `flex`.
+   - alignItems: `center`.
+   - gap: `var(--spacing-md)` (`12px`).
+
+2. **Source type `<select>`**:
+   - Options: "Local Camera" (value "local"), "RTSP" (value "rtsp").
+   - padding: `var(--spacing-sm) var(--spacing-md)` (`8px 12px`).
+   - border: `1px solid var(--color-border)` (`1px solid #D4DAE0`).
+   - borderRadius: `var(--radius-sm)` (`4px`).
+   - color: `var(--color-text-primary)` (`#2C3E50`).
+
+3. **Device index input** (when selectedType is "local"):
+   - type: `number`, min: `0`.
+   - padding: `var(--spacing-sm) var(--spacing-md)` (`8px 12px`).
+   - border: `1px solid var(--color-border)` (`1px solid #D4DAE0`).
+   - borderRadius: `var(--radius-sm)` (`4px`).
+   - color: `var(--color-text-primary)` (`#2C3E50`).
+   - width: `120px`.
+
+4. **RTSP URL input** (when selectedType is "rtsp"):
+   - type: `text`, placeholder: `"rtsp://..."`.
+   - padding: `var(--spacing-sm) var(--spacing-md)` (`8px 12px`).
+   - border: `1px solid var(--color-border)` (`1px solid #D4DAE0`).
+   - borderRadius: `var(--radius-sm)` (`4px`).
+   - color: `var(--color-text-primary)` (`#2C3E50`).
+   - flex: `1` (fills remaining space).
+
+5. **"Update Camera" button**:
+   - padding: `var(--spacing-sm) var(--spacing-lg)` (`8px 16px`).
+   - backgroundColor: `var(--color-primary)` (`#5B8CB8`) when enabled; `var(--color-primary-disabled)` (`#A8C4DC`) when disabled.
+   - color: `var(--color-white)` (`#FFFFFF`).
+   - border: `none`.
+   - borderRadius: `var(--radius-sm)` (`4px`).
+   - cursor: `pointer` when enabled; `default` when disabled.
+   - Disabled when not dirty or `updating` is true.
+   - Text changes to "Updating..." while in flight.
 
 ## Inputs
 
@@ -95,6 +131,7 @@ JSX element representing the camera configuration form row.
 - The update button is never enabled when the form is clean (matches current `camera` prop).
 - `onUpdate` is never called while `updating` is `true` (button disabled prevents it).
 - `parseInt` uses radix 10 for device index conversion.
+- All visual constants must come from design tokens.
 
 ## Edge Cases
 
@@ -109,5 +146,6 @@ JSX element representing the camera configuration form row.
 
 ## Related
 
+- [Design Tokens](../styles/design-tokens.md): defines all visual constants.
 - [App](../App.md): parent that provides props and wires to `useConfig`.
 - [useConfig](../hooks/useConfig.md): actual API communication.

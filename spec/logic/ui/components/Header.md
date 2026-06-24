@@ -12,13 +12,22 @@ Static presentational component that renders the application title bar at the to
 
 ## Dependencies
 
-None.
+| Collaborator | Role | Allowed Interaction | Forbidden Interaction |
+|---|---|---|---|
+| Design Tokens | Visual constants | Consume via CSS custom properties | Must not hardcode values that differ from token definitions |
 
 ## Behavior
 
-1. Renders a `<header>` element with white background and a subtle bottom border (`#D4DAE0`).
-2. Contains an `<h1>` displaying the text "ModelLens" in bold, 1.5rem font size, colored `#2C3E50`.
-3. Padding: `12px 24px`.
+1. Renders a `<header>` element with:
+   - backgroundColor: `var(--color-bg-surface)` (`#FFFFFF`).
+   - borderBottom: `1px solid var(--color-border)` (`1px solid #D4DAE0`).
+   - padding: `var(--spacing-md) var(--spacing-xl)` (`12px 24px`).
+2. Contains an `<h1>` element with:
+   - Text content: "ModelLens".
+   - margin: `0`.
+   - color: `var(--color-text-primary)` (`#2C3E50`).
+   - fontSize: `var(--font-size-heading)` (`1.5rem`).
+   - fontWeight: `bold`.
 
 ## Inputs
 
@@ -39,4 +48,5 @@ None — purely static.
 
 ## Related
 
+- [Design Tokens](../styles/design-tokens.md): defines all visual constants.
 - [App](../App.md): parent component that renders Header.
