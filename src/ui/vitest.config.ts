@@ -7,5 +7,6 @@ export default defineConfig({
     environment: "jsdom",
     globals: false,
     setupFiles: ["./src/test-helpers/setup.ts"],
+    css: true,
   },
 });

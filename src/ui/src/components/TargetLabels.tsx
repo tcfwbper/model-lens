@@ -87,29 +87,104 @@ export function TargetLabels({ validLabels, activeLabels, onUpdate }: TargetLabe
     label.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const buttonEnabled = isDirty() && !updating;
+
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} style={{ position: "relative" }}>
       <button
         onClick={() => setDropdownOpen(!dropdownOpen)}
         aria-label={getTriggerText()}
+        style={{
+          width: "100%",
+          padding: "8px 12px",
+          backgroundColor: "#FFFFFF",
+          border: "1px solid #D4DAE0",
+          borderRadius: "4px",
+          textAlign: "left",
+          cursor: "pointer",
+          color: "#2C3E50",
+        }}
       >
         {getTriggerText()}
       </button>
       {dropdownOpen && (
-        <div>
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: "0",
+            right: "0",
+            backgroundColor: "#FFFFFF",
+            border: "1px solid #D4DAE0",
+            borderRadius: "4px",
+            marginTop: "4px",
+            zIndex: 10,
+            maxHeight: "300px",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           <input
             type="text"
             placeholder="Search labels..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            style={{
+              padding: "8px 12px",
+              border: "none",
+              borderBottom: "1px solid #D4DAE0",
+              outline: "none",
+              color: "#2C3E50",
+            }}
           />
-          <div>
-            <button onClick={selectAll}>Select All</button>
-            <button onClick={clearAll}>Clear All</button>
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              padding: "4px 12px",
+              borderBottom: "1px solid #D4DAE0",
+            }}
+          >
+            <button
+              onClick={selectAll}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#5B8CB8",
+                cursor: "pointer",
+                padding: "4px",
+                fontSize: "0.85rem",
+              }}
+            >
+              Select All
+            </button>
+            <button
+              onClick={clearAll}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#5B8CB8",
+                cursor: "pointer",
+                padding: "4px",
+                fontSize: "0.85rem",
+              }}
+            >
+              Clear All
+            </button>
           </div>
           <div style={{ maxHeight: "220px", overflow: "auto" }}>
             {filteredLabels.map((label) => (
-              <label key={label} style={{ display: "block" }}>
+              <label
+                key={label}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "6px 12px",
+                  cursor: "pointer",
+                  color: "#2C3E50",
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={selected.has(label)}
@@ -122,8 +197,18 @@ export function TargetLabels({ validLabels, activeLabels, onUpdate }: TargetLabe
         </div>
       )}
       <button
-        disabled={!isDirty() || updating}
+        disabled={!buttonEnabled}
         onClick={handleUpdate}
+        style={{
+          marginTop: "8px",
+          padding: "8px 16px",
+          backgroundColor: buttonEnabled ? "#5B8CB8" : "#A8C4DC",
+          color: "#FFFFFF",
+          border: "none",
+          borderRadius: "4px",
+          cursor: buttonEnabled ? "pointer" : "default",
+          width: "100%",
+        }}
       >
         {updating ? "Updating..." : "Update Labels"}
       </button>

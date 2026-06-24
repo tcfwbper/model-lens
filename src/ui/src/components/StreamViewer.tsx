@@ -84,8 +84,10 @@ export function StreamViewer({ sseActive, onToggleSSE: _onToggleSSE, confidenceT
       {!showCanvas && (
         <div
           style={{
+            width: "100%",
             aspectRatio: "16/9",
-            background: "#FFFFFF",
+            backgroundColor: "#FFFFFF",
+            borderRadius: "4px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -101,11 +103,13 @@ export function StreamViewer({ sseActive, onToggleSSE: _onToggleSSE, confidenceT
         style={{
           width: "100%",
           aspectRatio: "16/9",
+          backgroundColor: "#FFFFFF",
+          borderRadius: "4px",
           display: showCanvas ? "block" : "none",
         }}
       />
       {confidenceThreshold !== null && (
-        <div style={{ textAlign: "right", color: "#6B7B8D", fontSize: "0.8rem" }}>
+        <div style={{ textAlign: "right", color: "#6B7B8D", fontSize: "0.8rem", marginTop: "4px" }}>
           Confidence Threshold: {confidenceThreshold.toFixed(2)}
         </div>
       )}

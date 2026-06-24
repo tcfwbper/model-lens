@@ -77,9 +77,30 @@ export function CameraConfig({ camera, onUpdate }: CameraConfigProps): JSX.Eleme
     }
   }
 
+  const buttonEnabled = isDirty() && !updating;
+
   return (
-    <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", background: "#FFFFFF", padding: "12px", borderRadius: "4px", border: "1px solid #D4DAE0" }}>
-      <select value={selectedType} onChange={handleTypeChange}>
+    <div
+      style={{
+        backgroundColor: "#FFFFFF",
+        border: "1px solid #D4DAE0",
+        borderRadius: "8px",
+        padding: "16px",
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+      }}
+    >
+      <select
+        value={selectedType}
+        onChange={handleTypeChange}
+        style={{
+          padding: "8px 12px",
+          border: "1px solid #D4DAE0",
+          borderRadius: "4px",
+          color: "#2C3E50",
+        }}
+      >
         <option value="local">Local Camera</option>
         <option value="rtsp">RTSP</option>
       </select>
@@ -89,6 +110,13 @@ export function CameraConfig({ camera, onUpdate }: CameraConfigProps): JSX.Eleme
           min={0}
           value={deviceIndex}
           onChange={(e) => setDeviceIndex(e.target.value)}
+          style={{
+            width: "120px",
+            padding: "8px 12px",
+            border: "1px solid #D4DAE0",
+            borderRadius: "4px",
+            color: "#2C3E50",
+          }}
         />
       ) : (
         <input
@@ -96,11 +124,26 @@ export function CameraConfig({ camera, onUpdate }: CameraConfigProps): JSX.Eleme
           placeholder="rtsp://..."
           value={rtspUrl}
           onChange={(e) => setRtspUrl(e.target.value)}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            border: "1px solid #D4DAE0",
+            borderRadius: "4px",
+            color: "#2C3E50",
+          }}
         />
       )}
       <button
-        disabled={!isDirty() || updating}
+        disabled={!buttonEnabled}
         onClick={handleSubmit}
+        style={{
+          padding: "8px 16px",
+          backgroundColor: buttonEnabled ? "#5B8CB8" : "#A8C4DC",
+          color: "#FFFFFF",
+          borderStyle: "none",
+          borderRadius: "4px",
+          cursor: buttonEnabled ? "pointer" : "default",
+        }}
       >
         {updating ? "Updating..." : "Update Camera"}
       </button>
