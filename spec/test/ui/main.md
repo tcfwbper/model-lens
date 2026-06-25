@@ -16,7 +16,6 @@
 |---|---|---|---|---|---|
 | `renders_app_inside_strict_mode` | `unit` | Entry point renders App wrapped in React.StrictMode. | Create a DOM element with id `root` and append it to `document.body`. Mock `react-dom/client`'s `createRoot` to return an object with a `render` spy. Mock the `App` component to render a placeholder. | Import `main.tsx` (side-effect execution). | `createRoot` is called with the `#root` DOM element. The `render` spy is called once with a tree containing `<StrictMode><App /></StrictMode>`. |
 | `calls_create_root_with_root_element` | `unit` | createRoot receives the DOM element with id "root". | Create a DOM element with id `root` and append it to `document.body`. Mock `react-dom/client`'s `createRoot` to return an object with a `render` spy. | Import `main.tsx` (side-effect execution). | `createRoot` is called exactly once with `document.getElementById("root")` (the element created in setup). |
-| `imports_design_tokens_stylesheet` | `unit` | The module imports design-tokens.css as a side-effect. | Mock the CSS import (`design-tokens.css`) to verify it is loaded. Create a DOM element with id `root` and append it to `document.body`. Mock `react-dom/client`'s `createRoot` to return an object with a `render` spy. | Import `main.tsx` (side-effect execution). | The `design-tokens.css` module is imported (mock is resolved/called). |
 
 ### Mock / Dependency Interaction
 

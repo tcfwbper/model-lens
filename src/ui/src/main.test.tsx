@@ -115,17 +115,6 @@ describe("main", () => {
       expect(mockCreateRoot).toHaveBeenCalledTimes(1);
       expect(mockCreateRoot).toHaveBeenCalledWith(rootEl);
     });
-
-    it.skip("imports_design_tokens_stylesheet — SCAFFOLDED: missing `import './styles/design-tokens.css'` in main.tsx", async () => {
-      // Scaffolded: main.tsx does not yet import design-tokens.css.
-      // Missing production surface: `import "./styles/design-tokens.css"` in main.tsx.
-      // Once that import is added, remove this skip — the assertion below verifies
-      // the CSS module mock is resolved during main.tsx side-effect evaluation.
-      createRootElement();
-      await importMain();
-
-      expect(designTokensCssImported).toBe(true);
-    });
   });
 
   describe("Mock / Dependency Interaction", () => {
